@@ -1,0 +1,6 @@
+{
+  "name": "NexusByte - Digital Goods Marketplace & OxaPay Gateway",
+  "description": "Multi-vendor digital marketplace for software, scripts, templates, and license keys with OxaPay crypto checkout, secure delivery, and vendor portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

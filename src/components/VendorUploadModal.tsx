@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Upload, Plus, Trash2, Code2, ShieldCheck, Key, Download } from 'lucide-react';
 import { ProductCategory, DeliveryType, LicenseType, Product } from '../types/marketplace';
+import { addLocalProduct } from '../utils/localStore';
 
 interface VendorUploadModalProps {
   onClose: () => void;
@@ -57,37 +58,84 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
 
       const generatedFileName = fileName.trim() || `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${version}.zip`;
 
-      const res = await fetch('/api/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          tagline,
-          description,
-          priceUSD: Number(priceUSD),
-          category,
-          deliveryType,
-          licenseType,
-          version,
-          fileName: generatedFileName,
-          fileSize,
-          fileFormat,
-          tags: tags.length ? tags : ['Software', 'Digital Good'],
-          features,
-          codeSnippetPreview: {
-            language: 'typescript',
-            filename: 'index.ts',
-            code: codeSnippet,
-          },
-          downloadContentSample: `=====================================================\n${title.toUpperCase()} ${version}\n=====================================================\nDigital product delivered securely via NexusByte.\nLicense: ${licenseType}\nThank you for supporting independent software creators!`,
-        }),
-      });
+      const payload = {
+        title,
+        tagline: tagline || 'High-performance digital asset for modern developers',
+        description: description || title,
+        priceUSD: Number(priceUSD),
+        category,
+        deliveryType,
+        licenseType,
+        version,
+        fileName: generatedFileName,
+        fileSize,
+        fileFormat,
+        tags: tags.length ? tags : ['Software', 'Digital Good'],
+        features,
+        codeSnippetPreview: {
+          language: 'typescript',
+          filename: 'index.ts',
+          code: codeSnippet,
+        },
+        downloadContentSample: `=====================================================\n${title.toUpperCase()} ${version}\n=====================================================\nDigital product delivered securely via NexusByte.\nLicense: ${licenseType}\nThank you for supporting independent software creators!`,
+      };
 
-      if (res.ok) {
-        const data = await res.json();
-        onProductCreated(data.product);
-        onClose();
+      let createdProduct: Product | null = null;
+
+      try {
+        const res = await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          createdProduct = data.product;
+        }
+      } catch (networkErr) {
+        console.warn('Backend offline or static hosting, falling back to local storage', networkErr);
       }
+
+      // If backend was not reached or returned non-JSON (like static Cloudflare Pages), create locally
+      if (!createdProduct) {
+        createdProduct = {
+          id: `prod_local_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          title: payload.title,
+          slug: payload.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+          tagline: payload.tagline,
+          description: payload.description,
+          priceUSD: payload.priceUSD,
+          category: payload.category,
+          deliveryType: payload.deliveryType,
+          licenseType: payload.licenseType,
+          version: payload.version,
+          fileInfo: {
+            fileName: payload.fileName,
+            fileSize: payload.fileSize,
+            format: payload.fileFormat,
+          },
+          licenseKeysAvailable: payload.deliveryType === 'file' ? undefined : 25,
+          vendorId: 'vendor_user_local',
+          vendorName: 'You (Vendor)',
+          vendorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
+          rating: 5.0,
+          reviewsCount: 1,
+          salesCount: 0,
+          bannerGradient: 'from-cyan-600 via-blue-600 to-indigo-700',
+          tags: payload.tags,
+          features: payload.features,
+          changelog: [{ version: payload.version, date: new Date().toISOString().split('T')[0], changes: ['Initial release'] }],
+          codeSnippetPreview: payload.codeSnippetPreview,
+          downloadContentSample: payload.downloadContentSample,
+          createdAt: new Date().toISOString(),
+        };
+        addLocalProduct(createdProduct);
+      }
+
+      onProductCreated(createdProduct);
+      onClose();
     } catch (err) {
       console.error('Failed to create product', err);
     } finally {

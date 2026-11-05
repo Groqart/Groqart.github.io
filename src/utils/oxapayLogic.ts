@@ -25,22 +25,31 @@ export function calculateCryptoAmount(priceUSD: number, currency: 'USDT' | 'BTC'
   return Math.round(raw * factor) / factor;
 }
 
+function getRandomHex(bytes: number): string {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+    const arr = new Uint8Array(bytes);
+    window.crypto.getRandomValues(arr);
+    return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return crypto.randomBytes(bytes).toString('hex');
+}
+
 /**
  * Generates an OxaPay mock/sandbox crypto deposit address for tests
  */
 export function generateSandboxAddress(currency: string): string {
   switch (currency) {
     case 'BTC':
-      return 'bc1q' + crypto.randomBytes(16).toString('hex');
+      return 'bc1q' + getRandomHex(16);
     case 'ETH':
-      return '0x' + crypto.randomBytes(20).toString('hex');
+      return '0x' + getRandomHex(20);
     case 'SOL':
-      return crypto.randomBytes(24).toString('base64url');
+      return getRandomHex(24);
     case 'LTC':
-      return 'ltc1q' + crypto.randomBytes(16).toString('hex');
+      return 'ltc1q' + getRandomHex(16);
     case 'USDT':
     default:
-      return 'T' + crypto.randomBytes(17).toString('hex').slice(0, 33);
+      return 'T' + getRandomHex(17).slice(0, 33);
   }
 }
 
@@ -67,9 +76,9 @@ export function formatCryptoPaymentURI(currency: string, address: string, amount
  * Generates a standard software license key formatted as XXXX-XXXX-XXXX-XXXX
  */
 export function generateLicenseKey(prefix = 'NEXUS'): string {
-  const part1 = crypto.randomBytes(2).toString('hex').toUpperCase();
-  const part2 = crypto.randomBytes(2).toString('hex').toUpperCase();
-  const part3 = crypto.randomBytes(2).toString('hex').toUpperCase();
+  const part1 = getRandomHex(2).toUpperCase();
+  const part2 = getRandomHex(2).toUpperCase();
+  const part3 = getRandomHex(2).toUpperCase();
   return `${prefix}-${part1}-${part2}-${part3}`;
 }
 

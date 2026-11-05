@@ -28,6 +28,20 @@ import {
   UserRole,
   CryptoCurrency,
 } from './types/marketplace';
+import {
+  getLocalProducts,
+  saveLocalProducts,
+  deleteLocalProduct,
+  getLocalOrders,
+  addLocalOrder,
+  updateLocalOrderStatus,
+} from './utils/localStore';
+import {
+  calculateCryptoAmount,
+  generateSandboxAddress,
+  formatCryptoPaymentURI,
+  SUPPORTED_CRYPTO,
+} from './utils/oxapayLogic';
 
 const CATEGORIES: ProductCategory[] = [
   'All',
@@ -46,6 +60,7 @@ export default function App() {
   const [cart, setCart] = useState<Product[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [currentRole, setCurrentRole] = useState<UserRole>('buyer');
+  const [isBackendConnected, setIsBackendConnected] = useState<boolean | null>(null);
 
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,30 +75,41 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Fetch initial products
+  // Fetch initial products with static/Cloudflare Pages fallback
   const fetchProducts = async () => {
     try {
       const res = await fetch('/api/products');
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         setProducts(data.products);
+        saveLocalProducts(data.products);
+        setIsBackendConnected(true);
+        return;
       }
     } catch (err) {
-      console.error('Failed to fetch products', err);
+      console.warn('Backend API unreachable or static host, using local storage cache', err);
     }
+    // Fallback for static hosting (Cloudflare Pages, etc.)
+    setIsBackendConnected(false);
+    const local = getLocalProducts();
+    setProducts(local);
   };
 
-  // Fetch orders
+  // Fetch orders with static fallback
   const fetchOrders = async () => {
     try {
       const res = await fetch('/api/orders/my');
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         setOrders(data.orders);
+        return;
       }
     } catch (err) {
-      console.error('Failed to fetch orders', err);
+      console.warn('Backend API unreachable, using local orders cache', err);
     }
+    setOrders(getLocalOrders());
   };
 
   useEffect(() => {
@@ -124,30 +150,77 @@ export default function App() {
     return result;
   }, [products, selectedCategory, searchQuery, sortBy]);
 
-  // Initiate OxaPay checkout
+  // Initiate OxaPay checkout with static host fallback
   const handleInitiateBuy = async (product: Product, cryptoCurrency: CryptoCurrency = 'USDT') => {
     try {
-      const res = await fetch('/api/oxapay/create-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productId: product.id,
+      let createdOrder: Order | null = null;
+      try {
+        const res = await fetch('/api/oxapay/create-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productId: product.id,
+            buyerEmail: 'demo.buyer@nexusbyte.io',
+            buyerName: 'Demo Buyer',
+            cryptoCurrency,
+          }),
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          createdOrder = data.order;
+        }
+      } catch (err) {
+        console.warn('API invoice creation unavailable, generating client sandbox invoice', err);
+      }
+
+      // If backend was offline or static host (Cloudflare Pages)
+      if (!createdOrder) {
+        const cur = (cryptoCurrency.toUpperCase() in SUPPORTED_CRYPTO
+          ? cryptoCurrency.toUpperCase()
+          : 'USDT') as CryptoCurrency;
+        const trackId = `TRK_CF_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        const cryptoAmount = calculateCryptoAmount(product.priceUSD, cur);
+        const depositAddress = generateSandboxAddress(cur);
+        const network = SUPPORTED_CRYPTO[cur]?.network || 'TRC20';
+        const expiresAt = Date.now() + 15 * 60 * 1000;
+        const qrCodeData = formatCryptoPaymentURI(cur, depositAddress, cryptoAmount);
+
+        createdOrder = {
+          id: `ord_local_${Date.now()}`,
           buyerEmail: 'demo.buyer@nexusbyte.io',
           buyerName: 'Demo Buyer',
-          cryptoCurrency,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setActiveInvoiceOrder(data.order);
-        setDetailProduct(null);
-        setIsCartOpen(false);
-      } else {
-        showToast('Failed to generate OxaPay invoice.');
+          productId: product.id,
+          productTitle: product.title,
+          productCategory: product.category,
+          productVersion: product.version,
+          deliveryType: product.deliveryType,
+          priceUSD: product.priceUSD,
+          status: 'pending',
+          oxaInvoice: {
+            trackId,
+            address: depositAddress,
+            cryptoCurrency: cur,
+            network,
+            cryptoAmount,
+            qrCodeData,
+            expiresAt,
+            payLink: `https://oxapay.com/pay/${trackId}`,
+            isSandbox: true,
+          },
+          createdAt: new Date().toISOString(),
+        };
+        addLocalOrder(createdOrder);
+        setOrders((prev) => [createdOrder!, ...prev]);
       }
+
+      setActiveInvoiceOrder(createdOrder);
+      setDetailProduct(null);
+      setIsCartOpen(false);
     } catch (err) {
       console.error('Buy error', err);
+      showToast('Checkout could not be initialized.');
     }
   };
 
@@ -163,6 +236,7 @@ export default function App() {
 
   // Payment completed callback
   const handlePaymentSuccess = (updatedOrder: Order) => {
+    updateLocalOrderStatus(updatedOrder.id, 'paid');
     fetchOrders();
     fetchProducts();
     showToast(`Order for "${updatedOrder.productTitle}" confirmed! Assets ready.`);
@@ -332,6 +406,7 @@ export default function App() {
           <VendorDashboard
             products={products}
             onProductDeleted={(id) => {
+              deleteLocalProduct(id);
               setProducts(products.filter((p) => p.id !== id));
               showToast('Product removed from catalog');
             }}

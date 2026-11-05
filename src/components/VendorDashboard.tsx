@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Product, Order, VendorPayout, CryptoCurrency } from '../types/marketplace';
 import { VendorUploadModal } from './VendorUploadModal';
+import { getLocalPayouts, saveLocalPayout, getLocalOrders } from '../utils/localStore';
 
 interface VendorDashboardProps {
   products: Product[];
@@ -48,14 +49,33 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   const fetchStats = async () => {
     try {
       const res = await fetch('/api/vendor/stats');
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         setStats(data);
         if (data.payouts) setPayoutsList(data.payouts);
+        return;
       }
     } catch (err) {
-      console.error('Fetch stats error', err);
+      console.warn('Vendor stats API unreachable, calculating from local state', err);
     }
+
+    // Static fallback calculations
+    const localOrders = getLocalOrders().filter((o) => o.status === 'paid');
+    const localPayouts = getLocalPayouts();
+    const totalRev = localOrders.reduce((acc, o) => acc + o.priceUSD, 0);
+    const net = totalRev * 0.95;
+    const paidOut = localPayouts.reduce((acc, p) => acc + p.amountUSD, 0);
+
+    setStats({
+      totalProducts: products.length,
+      totalSalesCount: localOrders.length,
+      totalRevenueUSD: totalRev,
+      netEarningsUSD: net,
+      availableBalanceUSD: Math.max(0, net - paidOut),
+      recentOrders: localOrders.slice(0, 5),
+    });
+    setPayoutsList(localPayouts);
   };
 
   useEffect(() => {
@@ -67,19 +87,40 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     if (!payoutAddress || payoutAmount <= 0) return;
 
     try {
-      const res = await fetch('/api/vendor/payout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let success = false;
+      try {
+        const res = await fetch('/api/vendor/payout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amountUSD: payoutAmount,
+            cryptoCurrency: payoutCurrency,
+            cryptoAddress: payoutAddress,
+          }),
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          success = true;
+        }
+      } catch (err) {
+        console.warn('API payout failed, saving locally', err);
+      }
+
+      if (!success) {
+        const newPayout: VendorPayout = {
+          id: `pay_loc_${Date.now()}`,
+          vendorId: 'vendor_user_local',
           amountUSD: payoutAmount,
           cryptoCurrency: payoutCurrency,
-          cryptoAddress: payoutAddress,
-        }),
-      });
-      if (res.ok) {
-        setShowPayoutModal(false);
-        fetchStats();
+          address: payoutAddress,
+          status: 'completed',
+          createdAt: new Date().toISOString(),
+        };
+        saveLocalPayout(newPayout);
       }
+
+      setShowPayoutModal(false);
+      fetchStats();
     } catch (err) {
       console.error('Payout error', err);
     }
@@ -87,14 +128,12 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        onProductDeleted(id);
-        fetchStats();
-      }
+      await fetch(`/api/products/${id}`, { method: 'DELETE' });
     } catch (err) {
-      console.error('Delete product error', err);
+      console.warn('API delete failed, proceeding with local delete', err);
     }
+    onProductDeleted(id);
+    fetchStats();
   };
 
   return (

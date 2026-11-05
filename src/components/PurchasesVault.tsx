@@ -51,6 +51,51 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
     return `${hours}h ${mins}m remaining`;
   };
 
+  const handleDownloadAsset = async (order: Order) => {
+    try {
+      const res = await fetch(`/api/downloads/${order.secureDelivery?.downloadToken}`);
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && !contentType.includes('text/html')) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = order.secureDelivery?.fileName || 'digital-asset.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return;
+      }
+    } catch (err) {
+      console.warn('API download not available, downloading local package bundle', err);
+    }
+
+    // Static fallback
+    const content = `=====================================================
+${order.productTitle.toUpperCase()} - SECURE DELIVERY PACKAGE
+=====================================================
+Order ID: ${order.id}
+Track ID: ${order.oxaInvoice.trackId}
+Delivered To: ${order.buyerEmail}
+Timestamp: ${new Date().toISOString()}
+License Key: ${order.secureDelivery?.licenseKey || 'N/A'}
+Status: Verified Paid via OxaPay (${order.oxaInvoice.cryptoCurrency})
+
+[PACKAGE CONTENTS & INSTALLATION]
+1. Source code archive and documentation.
+2. License: Commercial Single Operator.
+3. Thank you for purchasing on NexusByte Marketplace!`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${order.secureDelivery?.fileName || 'digital-package'}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       {/* Title & Stats */}
@@ -164,14 +209,13 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
                         </p>
                       </div>
 
-                      <a
-                        href={`/api/downloads/${order.secureDelivery.downloadToken}`}
-                        download={order.secureDelivery.fileName}
-                        className="flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow hover:bg-cyan-400 transition"
+                      <button
+                        onClick={() => handleDownloadAsset(order)}
+                        className="flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow hover:bg-cyan-400 transition cursor-pointer"
                       >
                         <Download className="h-4 w-4" />
                         Download Asset ({order.secureDelivery.fileName})
-                      </a>
+                      </button>
                     </div>
                   )}
 

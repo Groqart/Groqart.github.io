@@ -123,7 +123,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </button>
           <button
             onClick={() => onQuickBuy(product)}
-            aria-label={`Buy ${product.title} with OxaPay`}
+            aria-label={`Buy ${product.title} with NOWPayments`}
             className="flex h-9 items-center justify-center rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-3.5 text-xs font-semibold text-white shadow-sm hover:from-cyan-400 hover:to-blue-500 hover:shadow-cyan-500/25 transition"
           >
             <ShieldCheck className="h-3.5 w-3.5 mr-1 text-cyan-200" />

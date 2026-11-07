@@ -93,7 +93,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-3 text-xs font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition"
             >
               <ShieldCheck className="h-4 w-4" />
-              Proceed to OxaPay Checkout ({cart[0].title.slice(0, 20)}...)
+              Proceed to NOWPayments Checkout ({cart[0].title.slice(0, 20)}...)
             </button>
           </div>
         )}

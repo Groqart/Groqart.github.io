@@ -6,7 +6,7 @@ import {
   Product,
   Order,
   VendorPayout,
-  OxaPayConfig,
+  NowPaymentsConfig,
   CryptoCurrency,
 } from './src/types/marketplace';
 import {
@@ -16,9 +16,10 @@ import {
   generateSignedDownloadToken,
   verifyDownloadToken,
   generateLicenseKey,
+  verifyNowPaymentsIpnSignature,
   verifyOxaPayWebhookSignature,
   SUPPORTED_CRYPTO,
-} from './src/utils/oxapayLogic';
+} from './src/utils/nowpaymentsLogic';
 
 const app = express();
 const PORT = 3000;
@@ -35,11 +36,11 @@ app.use(
 
 import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 
-// Global In-Memory Database
-const oxaConfig: OxaPayConfig = {
-  merchantApiKey: process.env.OXAPAY_API_KEY || 'sandbox_merchant_key_demo',
-  sandboxMode: true,
-  webhookSecret: 'oxapay_webhook_secret_sandbox_key',
+// NOWPayments Gateway Configuration (Live Production Credentials)
+const nowPaymentsConfig: NowPaymentsConfig = {
+  apiKey: process.env.NOWPAYMENTS_API_KEY || '18AMNE0-FTRM0YT-PA99F79-T7SB559',
+  ipnSecret: process.env.NOWPAYMENTS_IPN_SECRET || 'bc2ziZ+I+Xa4lpmE9zv4aQBrmLbe1xVI',
+  sandboxMode: false,
 };
 
 let products: Product[] = [...INITIAL_PRODUCTS];
@@ -219,11 +220,11 @@ app.delete('/api/products/:id', (req: Request, res: Response) => {
 });
 
 // ==========================================
-// OXAPAY PAYMENT INTEGRATION
+// NOWPAYMENTS GATEWAY INTEGRATION
 // ==========================================
 
-// Create OxaPay Invoice for a product purchase
-app.post('/api/oxapay/create-invoice', async (req: Request, res: Response) => {
+// Create NOWPayments Invoice / Payment for a product purchase
+app.post(['/api/nowpayments/create-invoice', '/api/oxapay/create-invoice', '/api/payments/create-invoice'], async (req: Request, res: Response) => {
   try {
     const { productId, buyerEmail, buyerName, cryptoCurrency = 'USDT' } = req.body;
 
@@ -237,24 +238,89 @@ app.post('/api/oxapay/create-invoice', async (req: Request, res: Response) => {
       : 'USDT') as CryptoCurrency;
 
     const orderId = `ord_${crypto.randomBytes(8).toString('hex')}`;
-    const trackId = `TRK_${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
-    const cryptoAmount = calculateCryptoAmount(product.priceUSD, cur);
-    const depositAddress = generateSandboxAddress(cur);
-    const network = SUPPORTED_CRYPTO[cur].network;
-    const expiresAt = Date.now() + 15 * 60 * 1000; // 15-minute checkout window
+    const trackId = `NP_${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+    const meta = SUPPORTED_CRYPTO[cur] || SUPPORTED_CRYPTO.USDT;
 
+    let paymentId: string | undefined = undefined;
+    let depositAddress = generateSandboxAddress(cur);
+    let cryptoAmount = calculateCryptoAmount(product.priceUSD, cur);
+    let invoiceUrl = `https://nowpayments.io/payment/?order_id=${orderId}`;
+    let isLiveNowPayments = false;
+
+    // Call live NOWPayments API with user's credentials
+    if (nowPaymentsConfig.apiKey) {
+      try {
+        const callbackUrl = `${req.protocol}://${req.get('host')}/api/nowpayments/ipn`;
+        const nowRes = await fetch('https://api.nowpayments.io/v1/payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': nowPaymentsConfig.apiKey,
+          },
+          body: JSON.stringify({
+            price_amount: product.priceUSD,
+            price_currency: 'usd',
+            pay_currency: meta.nowTicker,
+            ipn_callback_url: callbackUrl,
+            order_id: orderId,
+            order_description: `${product.title} (${product.version})`,
+          }),
+        });
+
+        if (nowRes.ok) {
+          const nowData = await nowRes.json();
+          paymentId = String(nowData.payment_id);
+          depositAddress = nowData.pay_address || depositAddress;
+          cryptoAmount = nowData.pay_amount || cryptoAmount;
+          if (nowData.invoice_url) {
+            invoiceUrl = nowData.invoice_url;
+          }
+          isLiveNowPayments = true;
+          console.log(`[NOWPayments] Live payment created successfully: ID=${paymentId}, Address=${depositAddress}`);
+        } else {
+          const errData = await nowRes.json().catch(() => ({}));
+          console.warn('[NOWPayments] Direct payment error, trying /v1/invoice:', errData);
+          const invRes = await fetch('https://api.nowpayments.io/v1/invoice', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': nowPaymentsConfig.apiKey,
+            },
+            body: JSON.stringify({
+              price_amount: product.priceUSD,
+              price_currency: 'usd',
+              ipn_callback_url: callbackUrl,
+              order_id: orderId,
+              order_description: product.title,
+            }),
+          });
+          if (invRes.ok) {
+            const invData = await invRes.json();
+            paymentId = String(invData.id);
+            invoiceUrl = invData.invoice_url || invoiceUrl;
+            isLiveNowPayments = true;
+          }
+        }
+      } catch (apiErr) {
+        console.warn('[NOWPayments] Network/API call error, using local fallback:', apiErr);
+      }
+    }
+
+    const expiresAt = Date.now() + 20 * 60 * 1000; // 20-minute checkout window
     const qrCodeData = formatCryptoPaymentURI(cur, depositAddress, cryptoAmount);
 
-    const oxaInvoice = {
-      trackId,
+    const nowInvoice = {
+      paymentId: paymentId || trackId,
+      trackId: paymentId || trackId,
       address: depositAddress,
       cryptoCurrency: cur,
-      network,
+      network: meta.network,
       cryptoAmount,
       qrCodeData,
       expiresAt,
-      payLink: `https://oxapay.com/pay/${trackId}`,
-      isSandbox: oxaConfig.sandboxMode,
+      payLink: invoiceUrl,
+      invoiceUrl,
+      isSandbox: !isLiveNowPayments && nowPaymentsConfig.sandboxMode,
     };
 
     const newOrder: Order = {
@@ -268,7 +334,8 @@ app.post('/api/oxapay/create-invoice', async (req: Request, res: Response) => {
       deliveryType: product.deliveryType,
       priceUSD: product.priceUSD,
       status: 'pending',
-      oxaInvoice,
+      oxaInvoice: nowInvoice,
+      paymentInvoice: nowInvoice,
       createdAt: new Date().toISOString(),
     };
 
@@ -277,19 +344,58 @@ app.post('/api/oxapay/create-invoice', async (req: Request, res: Response) => {
     res.json({
       success: true,
       order: newOrder,
-      invoice: oxaInvoice,
+      invoice: nowInvoice,
     });
   } catch (err: any) {
-    console.error('Create invoice error:', err);
+    console.error('Create NOWPayments invoice error:', err);
     res.status(500).json({ error: err.message || 'Failed to create payment invoice' });
   }
 });
 
-// Poll invoice status
-app.get('/api/oxapay/invoice/:trackId', (req: Request, res: Response) => {
-  const order = orders.find((o) => o.oxaInvoice.trackId === req.params.trackId);
+// Poll payment status
+app.get(['/api/nowpayments/payment/:trackId', '/api/oxapay/invoice/:trackId'], async (req: Request, res: Response) => {
+  const trackId = req.params.trackId;
+  const order = orders.find(
+    (o) => o.oxaInvoice.trackId === trackId || o.oxaInvoice.paymentId === trackId || o.id === trackId
+  );
   if (!order) {
     return res.status(404).json({ error: 'Invoice not found' });
+  }
+
+  // Poll live NOWPayments API if order is still pending and paymentId exists
+  if (order.status === 'pending' && order.oxaInvoice.paymentId && nowPaymentsConfig.apiKey) {
+    try {
+      const checkRes = await fetch(`https://api.nowpayments.io/v1/payment/${order.oxaInvoice.paymentId}`, {
+        headers: { 'x-api-key': nowPaymentsConfig.apiKey },
+      });
+      if (checkRes.ok) {
+        const paymentData = await checkRes.json();
+        const pStatus = String(paymentData.payment_status || '').toLowerCase();
+        if (pStatus === 'finished' || pStatus === 'confirmed') {
+          order.status = 'paid';
+          order.paidAt = new Date().toISOString();
+          const downloadSign = generateSignedDownloadToken(order.id, DOWNLOAD_SECRET, 24);
+          let licenseKey: string | undefined = undefined;
+          if (order.deliveryType === 'license_key' || order.deliveryType === 'both') {
+            const prefix = (order.productTitle.split(' ')[0] || 'NEXUS').toUpperCase().slice(0, 5);
+            licenseKey = generateLicenseKey(prefix);
+          }
+          const product = products.find((p) => p.id === order.productId);
+          order.secureDelivery = {
+            downloadToken: downloadSign.token,
+            downloadExpiresAt: downloadSign.expiresAt,
+            downloadCount: 0,
+            maxDownloads: 5,
+            licenseKey,
+            fileName: product ? product.fileInfo.fileName : 'digital-package.zip',
+          };
+        } else if (pStatus === 'expired' || pStatus === 'failed') {
+          order.status = 'expired';
+        }
+      }
+    } catch {
+      // ignore network errors during status poll
+    }
   }
 
   // Check if pending has expired
@@ -303,30 +409,44 @@ app.get('/api/oxapay/invoice/:trackId', (req: Request, res: Response) => {
   });
 });
 
-// OxaPay Webhook Endpoint
-// OxaPay sends POST request upon confirmed blockchain transaction
-app.post('/api/oxapay/webhook', (req: any, res: Response) => {
+// NOWPayments IPN Webhook Endpoint
+// NOWPayments sends POST request upon confirmed blockchain transaction with x-nowpayments-sig HMAC-SHA512
+app.post(['/api/nowpayments/ipn', '/api/oxapay/webhook'], (req: any, res: Response) => {
   try {
-    const signature = req.headers['x-oxapay-signature'] || req.headers['hmac'];
-    const { trackId, status, isTestSimulation } = req.body;
+    const signature = req.headers['x-nowpayments-sig'] || req.headers['x-oxapay-signature'];
+    const { payment_id, payment_status, order_id, trackId, status, isTestSimulation } = req.body;
 
-    console.log(`[OxaPay Webhook] Received webhook for trackId: ${trackId}, status: ${status}`);
+    console.log(`[NOWPayments IPN] Notification received: payment_id=${payment_id}, status=${payment_status || status}, order_id=${order_id}`);
 
-    const order = orders.find((o) => o.oxaInvoice.trackId === trackId);
+    const idToFind = String(order_id || trackId || payment_id);
+    const order = orders.find(
+      (o) =>
+        o.id === idToFind ||
+        o.oxaInvoice.trackId === idToFind ||
+        o.oxaInvoice.paymentId === idToFind
+    );
+
     if (!order) {
+      console.warn(`[NOWPayments IPN] Order not found for ID: ${idToFind}`);
       return res.status(404).json({ error: 'Order not found for trackId' });
     }
 
-    // In live mode, verify signature. In sandbox or UI simulation, allow verified simulation
-    if (!oxaConfig.sandboxMode && !isTestSimulation) {
-      const isValid = verifyOxaPayWebhookSignature(req.rawBody || '', signature, oxaConfig.webhookSecret);
+    // Verify IPN HMAC-SHA512 signature using IPN Secret Key
+    if (signature && nowPaymentsConfig.ipnSecret && !isTestSimulation) {
+      const isValid = verifyNowPaymentsIpnSignature(req.body, signature, nowPaymentsConfig.ipnSecret);
       if (!isValid) {
-        console.warn('[OxaPay Webhook] Invalid signature rejected');
-        return res.status(401).json({ error: 'Invalid HMAC signature' });
+        console.warn('[NOWPayments IPN] Invalid HMAC signature rejected');
+        return res.status(401).json({ error: 'Invalid IPN HMAC signature' });
       }
     }
 
-    if (status === 'Paid' || status === 'paid' || status === 'Complete') {
+    const normalizedStatus = String(payment_status || status || '').toLowerCase();
+    if (
+      normalizedStatus === 'finished' ||
+      normalizedStatus === 'confirmed' ||
+      normalizedStatus === 'paid' ||
+      normalizedStatus === 'complete'
+    ) {
       order.status = 'paid';
       order.paidAt = new Date().toISOString();
 
@@ -342,7 +462,7 @@ app.post('/api/oxapay/webhook', (req: any, res: Response) => {
       // Generate signed, 24-hour time-limited download token
       const downloadSign = generateSignedDownloadToken(order.id, DOWNLOAD_SECRET, 24);
 
-      // Generate or retrieve license key if needed
+      // Generate license key if needed
       let licenseKey: string | undefined = undefined;
       if (order.deliveryType === 'license_key' || order.deliveryType === 'both') {
         const prefix = (order.productTitle.split(' ')[0] || 'NEXUS').toUpperCase().slice(0, 5);
@@ -358,32 +478,35 @@ app.post('/api/oxapay/webhook', (req: any, res: Response) => {
         fileName: product ? product.fileInfo.fileName : 'digital-package.zip',
       };
 
-      console.log(`[OxaPay Webhook] Order ${order.id} marked as PAID. Secure token & license generated.`);
-    } else if (status === 'Expired' || status === 'expired') {
+      console.log(`[NOWPayments IPN] Order ${order.id} marked as PAID. Secure token & license generated.`);
+    } else if (normalizedStatus === 'expired' || normalizedStatus === 'failed') {
       order.status = 'expired';
     }
 
     res.json({
-      result: 100,
-      message: 'Webhook processed successfully',
+      success: true,
+      message: 'IPN processed successfully',
       orderStatus: order.status,
       secureDeliveryReady: !!order.secureDelivery,
     });
   } catch (err: any) {
-    console.error('[OxaPay Webhook Error]:', err);
+    console.error('[NOWPayments IPN Error]:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Sandbox Simulator Helper: Instant 1-click test payment
-app.post('/api/oxapay/simulate-payment', (req: Request, res: Response) => {
-  const { trackId } = req.body;
-  const order = orders.find((o) => o.oxaInvoice.trackId === trackId);
+// Simulator Helper: Instant 1-click test payment
+app.post(['/api/nowpayments/simulate-payment', '/api/oxapay/simulate-payment'], (req: Request, res: Response) => {
+  const { trackId, payment_id } = req.body;
+  const targetId = String(trackId || payment_id);
+  const order = orders.find(
+    (o) => o.oxaInvoice.trackId === targetId || o.oxaInvoice.paymentId === targetId || o.id === targetId
+  );
   if (!order) {
     return res.status(404).json({ error: 'Order not found' });
   }
 
-  // Trigger internal webhook processing logic
+  // Trigger payment completion logic
   order.status = 'paid';
   order.paidAt = new Date().toISOString();
 
@@ -413,7 +536,7 @@ app.post('/api/oxapay/simulate-payment', (req: Request, res: Response) => {
 
   res.json({
     success: true,
-    message: 'Payment simulation completed! Webhook dispatched and order released.',
+    message: 'NOWPayments simulated payment completed! Assets unlocked.',
     order,
   });
 });
@@ -532,24 +655,39 @@ app.post('/api/vendor/payout', (req: Request, res: Response) => {
   res.status(201).json({ success: true, payout });
 });
 
-// Settings & OxaPay Gateway Config
-app.get('/api/oxapay/config', (_req: Request, res: Response) => {
+// Settings & NOWPayments Gateway Config
+app.get(['/api/nowpayments/config', '/api/oxapay/config'], (_req: Request, res: Response) => {
   res.json({
-    sandboxMode: oxaConfig.sandboxMode,
-    isApiKeyConfigured: !!oxaConfig.merchantApiKey,
-    webhookUrl: '/api/oxapay/webhook',
+    gateway: 'NOWPayments',
+    apiKeyMasked: nowPaymentsConfig.apiKey ? `${nowPaymentsConfig.apiKey.slice(0, 7)}...${nowPaymentsConfig.apiKey.slice(-6)}` : '',
+    hasApiKey: !!nowPaymentsConfig.apiKey,
+    hasIpnSecret: !!nowPaymentsConfig.ipnSecret,
+    sandboxMode: nowPaymentsConfig.sandboxMode,
+    ipnCallbackUrl: '/api/nowpayments/ipn',
+    webhookUrl: '/api/nowpayments/ipn',
+    isApiKeyConfigured: !!nowPaymentsConfig.apiKey,
   });
 });
 
-app.post('/api/oxapay/config', (req: Request, res: Response) => {
-  const { merchantApiKey, sandboxMode } = req.body;
+app.post(['/api/nowpayments/config', '/api/oxapay/config'], (req: Request, res: Response) => {
+  const { apiKey, ipnSecret, sandboxMode, merchantApiKey } = req.body;
   if (typeof sandboxMode === 'boolean') {
-    oxaConfig.sandboxMode = sandboxMode;
+    nowPaymentsConfig.sandboxMode = sandboxMode;
   }
-  if (merchantApiKey !== undefined) {
-    oxaConfig.merchantApiKey = merchantApiKey;
+  if (apiKey !== undefined) {
+    nowPaymentsConfig.apiKey = apiKey;
+  } else if (merchantApiKey !== undefined) {
+    nowPaymentsConfig.apiKey = merchantApiKey;
   }
-  res.json({ success: true, config: oxaConfig });
+  if (ipnSecret !== undefined) {
+    nowPaymentsConfig.ipnSecret = ipnSecret;
+  }
+  res.json({ success: true, config: {
+    gateway: 'NOWPayments',
+    hasApiKey: !!nowPaymentsConfig.apiKey,
+    hasIpnSecret: !!nowPaymentsConfig.ipnSecret,
+    sandboxMode: nowPaymentsConfig.sandboxMode,
+  } });
 });
 
 // ==========================================

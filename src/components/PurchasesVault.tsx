@@ -79,7 +79,7 @@ Track ID: ${order.oxaInvoice.trackId}
 Delivered To: ${order.buyerEmail}
 Timestamp: ${new Date().toISOString()}
 License Key: ${order.secureDelivery?.licenseKey || 'N/A'}
-Status: Verified Paid via OxaPay (${order.oxaInvoice.cryptoCurrency})
+Status: Verified Paid via NOWPayments (${order.oxaInvoice.cryptoCurrency})
 
 [PACKAGE CONTENTS & INSTALLATION]
 1. Source code archive and documentation.
@@ -140,7 +140,7 @@ Status: Verified Paid via OxaPay (${order.oxaInvoice.cryptoCurrency})
           </div>
           <h3 className="text-base font-bold text-white">No digital purchases found yet</h3>
           <p className="text-xs text-slate-400 max-w-sm mt-1 mb-6">
-            Pick a script, SaaS template, bot or 3D asset from the marketplace and pay with OxaPay crypto to see it here.
+            Pick a script, SaaS template, bot or 3D asset from the marketplace and pay with NOWPayments crypto to see it here.
           </p>
           <button
             onClick={onBrowseMarketplace}

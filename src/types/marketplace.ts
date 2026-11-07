@@ -67,7 +67,8 @@ export interface Product {
 
 export type CryptoCurrency = 'USDT' | 'BTC' | 'ETH' | 'LTC' | 'SOL';
 
-export interface OxaInvoice {
+export interface NowPaymentsInvoice {
+  paymentId?: string;
   trackId: string;
   address: string;
   cryptoCurrency: CryptoCurrency;
@@ -77,7 +78,10 @@ export interface OxaInvoice {
   expiresAt: number; // timestamp
   payLink?: string;
   isSandbox: boolean;
+  invoiceUrl?: string;
 }
+
+export type OxaInvoice = NowPaymentsInvoice;
 
 export type OrderStatus = 'pending' | 'paid' | 'expired' | 'failed';
 
@@ -92,7 +96,8 @@ export interface Order {
   deliveryType: DeliveryType;
   priceUSD: number;
   status: OrderStatus;
-  oxaInvoice: OxaInvoice;
+  oxaInvoice: NowPaymentsInvoice;
+  paymentInvoice?: NowPaymentsInvoice;
   secureDelivery?: {
     downloadToken?: string;
     downloadExpiresAt?: number;
@@ -115,8 +120,11 @@ export interface VendorPayout {
   createdAt: string;
 }
 
-export interface OxaPayConfig {
-  merchantApiKey: string;
+export interface NowPaymentsConfig {
+  apiKey: string;
+  ipnSecret: string;
   sandboxMode: boolean;
-  webhookSecret: string;
 }
+
+export type OxaPayConfig = NowPaymentsConfig;
+

@@ -100,7 +100,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <ShieldCheck className="h-4 w-4" />
-            OxaPay Gateway
+            NOWPayments Gateway
           </button>
         </nav>
 
@@ -176,7 +176,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           }`}
         >
           <ShieldCheck className="h-3.5 w-3.5" />
-          OxaPay
+          NOWPayments
         </button>
       </div>
     </header>

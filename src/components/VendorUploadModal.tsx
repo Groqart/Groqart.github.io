@@ -25,10 +25,10 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
   const [fileFormat, setFileFormat] = useState('ZIP Source Archive');
   const [features, setFeatures] = useState<string[]>([
     'Clean modular architecture with full TypeScript types',
-    'Instant OxaPay webhook payment verification',
+    'Instant NOWPayments IPN payment verification',
   ]);
   const [newFeatureText, setNewFeatureText] = useState('');
-  const [tagsInput, setTagsInput] = useState('TypeScript, Node.js, OxaPay');
+  const [tagsInput, setTagsInput] = useState('TypeScript, Node.js, NOWPayments');
   const [codeSnippet, setCodeSnippet] = useState(
     `export async function handlePayment(webhookPayload) {\n  console.log("Verified digital good delivery:", webhookPayload.trackId);\n}`
   );
@@ -154,7 +154,7 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-white">Publish New Digital Good</h3>
-              <p className="text-xs text-slate-400">Configure file package, license keys, and OxaPay crypto pricing</p>
+              <p className="text-xs text-slate-400">Configure file package, license keys, and NOWPayments crypto pricing</p>
             </div>
           </div>
 

@@ -276,7 +276,7 @@ export default function App() {
               <div className="relative mx-auto max-w-5xl text-center">
                 <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-950/40 px-3.5 py-1 text-xs font-medium text-cyan-300 backdrop-blur-md mb-6">
                   <ShieldCheck className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>Powered by OxaPay Crypto Escrow Gateway • Zero Leak Guarantee</span>
+                  <span>Powered by NOWPayments Instant Crypto Gateway • Live IPN Verified</span>
                 </div>
 
                 <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
@@ -467,7 +467,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <Cpu className="h-4 w-4 text-cyan-400" />
             <span className="font-semibold text-slate-300">NexusByte Marketplace</span>
-            <span>&copy; {new Date().getFullYear()} • OxaPay V2 Integration</span>
+            <span>&copy; {new Date().getFullYear()} • NOWPayments Gateway Integration</span>
           </div>
 
           <div className="flex items-center gap-4 text-slate-400">

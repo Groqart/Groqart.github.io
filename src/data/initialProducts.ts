@@ -5,9 +5,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'prod_hypersaas_next15',
     title: 'HyperSaaS - Next.js 15 Full-Stack AI Boilerplate',
     slug: 'hypersaas-next15',
-    tagline: 'Ship production-ready SaaS in 48 hours with Auth, OxaPay & Stripe crypto billing',
+    tagline: 'Ship production-ready SaaS in 48 hours with Auth, NOWPayments & Stripe crypto billing',
     description:
-      'The modern developer boilerplate built on Next.js 15 App Router, React 19, Tailwind CSS v4, Prisma ORM, Server Actions, OxaPay crypto checkout, and Stripe. Fully typed with TypeScript and production-grade security headers.',
+      'The modern developer boilerplate built on Next.js 15 App Router, React 19, Tailwind CSS v4, Prisma ORM, Server Actions, NOWPayments crypto checkout, and Stripe. Fully typed with TypeScript and production-grade security headers.',
     priceUSD: 89,
     category: 'SaaS Starters',
     deliveryType: 'both',
@@ -26,10 +26,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     reviewsCount: 148,
     salesCount: 890,
     bannerGradient: 'from-blue-600 via-indigo-600 to-purple-700',
-    tags: ['Next.js 15', 'TypeScript', 'Tailwind v4', 'OxaPay', 'Prisma', 'AI SDK'],
+    tags: ['Next.js 15', 'TypeScript', 'Tailwind v4', 'NOWPayments', 'Prisma', 'AI SDK'],
     features: [
       'Next.js 15 App Router with Turbopack & React 19 Server Components',
-      'Plug-and-play OxaPay Crypto & Stripe Dual Payment System',
+      'Plug-and-play NOWPayments Crypto & Stripe Dual Payment System',
       'Role-based Access Control (RBAC) & Magic Link Authentication',
       'AI Text & Image streaming pipeline ready out-of-the-box',
       'Lifetime updates and private GitHub access included',
@@ -38,7 +38,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       {
         version: 'v2.4.1',
         date: '2026-10-18',
-        changes: ['Upgraded to React 19 stable', 'Added zero-fee USDT TRC20 instant OxaPay webhook'],
+        changes: ['Upgraded to React 19 stable', 'Added zero-fee USDT TRC20 instant NOWPayments IPN webhook'],
       },
       {
         version: 'v2.3.0',
@@ -48,20 +48,23 @@ export const INITIAL_PRODUCTS: Product[] = [
     ],
     codeSnippetPreview: {
       language: 'typescript',
-      filename: 'lib/oxapay.ts',
-      code: `import { OxaPayClient } from '@oxapay/sdk';
-
-export const oxa = new OxaPayClient({
-  merchantKey: process.env.OXAPAY_MERCHANT_KEY!,
-});
-
-export async function createCryptoCheckout(orderId: string, amountUSD: number) {
-  return await oxa.createInvoice({
-    amount: amountUSD,
-    currency: 'USD',
-    orderId,
-    callbackUrl: 'https://yourdomain.com/api/oxapay/webhook',
+      filename: 'lib/nowpayments.ts',
+      code: `export async function createCryptoCheckout(orderId: string, amountUSD: number) {
+  const res = await fetch('https://api.nowpayments.io/v1/payment', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.NOWPAYMENTS_API_KEY!,
+    },
+    body: JSON.stringify({
+      price_amount: amountUSD,
+      price_currency: 'usd',
+      pay_currency: 'usdttrc20',
+      ipn_callback_url: 'https://yourdomain.com/api/nowpayments/ipn',
+      order_id: orderId,
+    }),
   });
+  return await res.json();
 }`,
     },
     downloadContentSample: `=====================================================
@@ -74,7 +77,7 @@ Security Checksum: SHA256-4b9e28f7c908
 
 Included files:
 - /app (Next.js 15 app router)
-- /lib/oxapay.ts (Crypto payments bridge)
+- /lib/nowpayments.ts (Crypto payments bridge)
 - /components (Tailwind UI blocks)
 - .env.example
 - package.json

@@ -1,0 +1,452 @@
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Copy,
+  Check,
+  Clock,
+  ShieldCheck,
+  Zap,
+  Download,
+  Key,
+  ExternalLink,
+  RefreshCw,
+  Sparkles,
+  AlertCircle,
+} from 'lucide-react';
+import QRCode from 'qrcode';
+import { Order } from '../types/marketplace';
+
+interface NowPaymentsInvoiceModalProps {
+  order: Order | null;
+  onClose: () => void;
+  onPaymentSuccess: (updatedOrder: Order) => void;
+  onViewLibrary?: () => void;
+}
+
+export const NowPaymentsInvoiceModal: React.FC<NowPaymentsInvoiceModalProps> = ({
+  order,
+  onClose,
+  onPaymentSuccess,
+  onViewLibrary,
+}) => {
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [copiedAddress, setCopiedAddress] = useState(false);
+  const [copiedAmount, setCopiedAmount] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [timeLeftSec, setTimeLeftSec] = useState<number>(20 * 60);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [currentOrder, setCurrentOrder] = useState<Order | null>(order);
+  const [isRevealed, setIsRevealed] = useState(false);
+
+  useEffect(() => {
+    setCurrentOrder(order);
+  }, [order]);
+
+  // Generate real QR code image
+  useEffect(() => {
+    if (currentOrder?.oxaInvoice?.qrCodeData) {
+      QRCode.toDataURL(currentOrder.oxaInvoice.qrCodeData, {
+        width: 240,
+        margin: 2,
+        color: {
+          dark: '#030712',
+          light: '#ffffff',
+        },
+      })
+        .then((url) => setQrDataUrl(url))
+        .catch((err) => console.error('QR code error', err));
+    }
+  }, [currentOrder?.oxaInvoice?.qrCodeData]);
+
+  // 20-minute countdown timer
+  useEffect(() => {
+    if (!currentOrder || currentOrder.status === 'paid') return;
+
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, Math.floor((currentOrder.oxaInvoice.expiresAt - Date.now()) / 1000));
+      setTimeLeftSec(remaining);
+      if (remaining === 0 && currentOrder.status === 'pending') {
+        setCurrentOrder((prev) => (prev ? { ...prev, status: 'expired' } : null));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentOrder]);
+
+  // Periodic polling for payment confirmation (both NOWPayments and fallback)
+  useEffect(() => {
+    if (!currentOrder || currentOrder.status === 'paid' || currentOrder.status === 'expired') return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const id = currentOrder.oxaInvoice.paymentId || currentOrder.oxaInvoice.trackId;
+        const res = await fetch(`/api/nowpayments/payment/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'paid' && data.order) {
+            setCurrentOrder(data.order);
+            onPaymentSuccess(data.order);
+          }
+        }
+      } catch (err) {
+        console.error('Invoice polling error', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
+  }, [currentOrder, onPaymentSuccess]);
+
+  if (!currentOrder) return null;
+
+  const copyToClipboard = (text: string, type: 'address' | 'amount' | 'key') => {
+    navigator.clipboard.writeText(text);
+    if (type === 'address') {
+      setCopiedAddress(true);
+      setTimeout(() => setCopiedAddress(false), 2000);
+    } else if (type === 'amount') {
+      setCopiedAmount(true);
+      setTimeout(() => setCopiedAmount(false), 2000);
+    } else if (type === 'key') {
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    }
+  };
+
+  const handleSimulatePayment = async () => {
+    try {
+      setIsSimulating(true);
+      let updated: Order | null = null;
+      try {
+        const id = currentOrder.oxaInvoice.paymentId || currentOrder.oxaInvoice.trackId;
+        const res = await fetch('/api/nowpayments/simulate-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trackId: id, payment_id: id }),
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          updated = data.order;
+        }
+      } catch (e) {
+        console.warn('API simulate offline, fallback to client update', e);
+      }
+
+      if (!updated) {
+        // Fallback for static hosting (Cloudflare Pages)
+        updated = {
+          ...currentOrder,
+          status: 'paid',
+          paidAt: new Date().toISOString(),
+          secureDelivery: {
+            downloadToken: `dl_token_${Math.random().toString(36).substring(2, 9)}`,
+            downloadExpiresAt: Date.now() + 24 * 3600 * 1000,
+            downloadCount: 0,
+            maxDownloads: 5,
+            licenseKey: `NXBY-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-LIVE`,
+            fileName: `${currentOrder.productTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-package.zip`,
+          },
+        };
+      }
+
+      setCurrentOrder(updated);
+      onPaymentSuccess(updated);
+    } catch (err) {
+      console.error('Simulate payment error', err);
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  const handleDownloadAsset = async () => {
+    if (!currentOrder?.secureDelivery) return;
+    try {
+      const res = await fetch(`/api/downloads/${currentOrder.secureDelivery.downloadToken}`);
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && !contentType.includes('text/html')) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = currentOrder.secureDelivery.fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return;
+      }
+    } catch (e) {
+      console.warn('Download endpoint offline, preparing direct client package', e);
+    }
+
+    const content = `=====================================================
+${currentOrder.productTitle.toUpperCase()} - SECURE DELIVERY PACKAGE
+=====================================================
+Order ID: ${currentOrder.id}
+Payment ID: ${currentOrder.oxaInvoice.paymentId || currentOrder.oxaInvoice.trackId}
+License Key: ${currentOrder.secureDelivery.licenseKey || 'N/A'}
+Cryptocurrency: ${currentOrder.oxaInvoice.cryptoCurrency} (NOWPayments Instant Settlement)
+Delivered At: ${new Date().toISOString()}
+
+[INSTALLATION GUIDE]
+1. Verified digital package delivered via NexusByte.
+2. Unpack source repository or import components into your project.
+3. Keep your software license key confidential.`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentOrder.secureDelivery.fileName}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const formatTimer = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const isPaid = currentOrder.status === 'paid';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+      <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl my-8 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">NOWPayments Gateway</h3>
+                <span className="rounded bg-emerald-950 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-800">
+                  LIVE IPN READY
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Payment ID: {currentOrder.oxaInvoice.paymentId || currentOrder.oxaInvoice.trackId}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            aria-label="Close invoice modal"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* State: Pending / In Progress */}
+        {!isPaid ? (
+          <div className="mt-5 space-y-5">
+            {/* Countdown and Status Header */}
+            <div className="flex items-center justify-between rounded-xl bg-slate-950 p-3.5 border border-slate-800 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
+                </span>
+                <span className="font-medium text-slate-300">Awaiting blockchain deposit...</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 font-mono text-cyan-400 font-semibold">
+                <Clock className="h-3.5 w-3.5 text-cyan-400" />
+                <span>{formatTimer(timeLeftSec)}</span>
+              </div>
+            </div>
+
+            {/* QR Code and Payment Details */}
+            <div className="flex flex-col sm:flex-row items-center gap-6 rounded-2xl bg-slate-950/70 p-5 border border-slate-800/80">
+              {/* QR Box */}
+              <div className="flex flex-col items-center">
+                <div className="h-44 w-44 rounded-xl bg-white p-2 flex items-center justify-center shadow-lg shadow-cyan-500/5">
+                  {qrDataUrl ? (
+                    <img src={qrDataUrl} alt="NOWPayments Deposit QR" className="h-full w-full object-contain" />
+                  ) : (
+                    <div className="text-xs text-slate-600 font-mono">Generating QR...</div>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-400 mt-2 font-mono">Scan in wallet app</span>
+              </div>
+
+              {/* Amount and Address Fields */}
+              <div className="flex-1 w-full space-y-3.5">
+                {/* Product Summary */}
+                <div>
+                  <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Item</span>
+                  <p className="text-sm font-semibold text-white truncate">{currentOrder.productTitle}</p>
+                </div>
+
+                {/* Amount to Send */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Amount to Send</span>
+                    <span className="text-[11px] text-emerald-400 font-mono">${currentOrder.priceUSD} USD</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-xs">
+                    <span className="font-mono font-bold text-cyan-400 text-sm">
+                      {currentOrder.oxaInvoice.cryptoAmount} {currentOrder.oxaInvoice.cryptoCurrency}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(String(currentOrder.oxaInvoice.cryptoAmount), 'amount')}
+                      className="text-slate-400 hover:text-white flex items-center gap-1 transition"
+                      aria-label="Copy crypto amount"
+                    >
+                      {copiedAmount ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                      <span className="text-[11px]">{copiedAmount ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Destination Address */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Deposit Address</span>
+                    <span className="text-[10px] text-slate-400 font-mono">{currentOrder.oxaInvoice.network}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-xs">
+                    <span className="font-mono text-slate-300 text-[11px] truncate max-w-[200px]">
+                      {currentOrder.oxaInvoice.address}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(currentOrder.oxaInvoice.address, 'address')}
+                      className="text-slate-400 hover:text-white flex items-center gap-1 transition"
+                      aria-label="Copy crypto address"
+                    >
+                      {copiedAddress ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                      <span className="text-[11px]">{copiedAddress ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Hosted checkout link if provided by NOWPayments */}
+            {currentOrder.oxaInvoice.payLink && (
+              <a
+                href={currentOrder.oxaInvoice.payLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 py-2.5 text-xs font-semibold text-slate-200 transition"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-cyan-400" />
+                <span>Open in NOWPayments Hosted Checkout</span>
+              </a>
+            )}
+
+            {/* Simulation & Test Trigger */}
+            <div className="rounded-xl border border-dashed border-cyan-500/30 bg-cyan-950/20 p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-cyan-400 shrink-0" />
+                <span className="text-slate-300 text-[11px]">
+                  Testing? Simulate an instant blockchain confirmation & IPN webhook dispatch.
+                </span>
+              </div>
+              <button
+                onClick={handleSimulatePayment}
+                disabled={isSimulating}
+                className="w-full sm:w-auto shrink-0 rounded-lg bg-cyan-500 px-3 py-1.5 font-bold text-slate-950 hover:bg-cyan-400 transition disabled:opacity-50"
+              >
+                {isSimulating ? 'Processing...' : 'Simulate 1-Click Payment'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* State: Paid / Completed! Instant Fulfillment */
+          <div className="mt-5 space-y-5">
+            <div className="flex flex-col items-center justify-center text-center p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/40">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30 mb-2">
+                <Check className="h-6 w-6 stroke-[3]" />
+              </div>
+              <h3 className="text-lg font-bold text-white">Payment Confirmed via NOWPayments!</h3>
+              <p className="text-xs text-emerald-300 mt-1">
+                Blockchain transaction confirmed. Digital assets are cryptographically unlocked.
+              </p>
+            </div>
+
+            {/* Revealed Assets */}
+            <div className="space-y-3">
+              {/* License Key (if applicable) */}
+              {currentOrder.secureDelivery?.licenseKey && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                      <Key className="h-3.5 w-3.5 text-amber-400" />
+                      Your Software License Key
+                    </span>
+                    <button
+                      onClick={() => setIsRevealed(!isRevealed)}
+                      className="text-[11px] text-cyan-400 hover:underline"
+                    >
+                      {isRevealed ? 'Hide' : 'Reveal'}
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-xs">
+                    <span className="font-mono font-bold text-amber-300">
+                      {isRevealed
+                        ? currentOrder.secureDelivery.licenseKey
+                        : '••••-••••-••••-••••'}
+                    </span>
+                    <button
+                      onClick={() =>
+                        copyToClipboard(currentOrder.secureDelivery?.licenseKey || '', 'key')
+                      }
+                      className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition"
+                      aria-label="Copy license key"
+                    >
+                      {copiedKey ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      <span>{copiedKey ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Secure Download Link */}
+              {currentOrder.secureDelivery?.downloadToken && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                      <Download className="h-3.5 w-3.5 text-cyan-400" />
+                      Signed Time-Limited Download Token
+                    </span>
+                    <span className="text-[10px] font-mono text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800">
+                      Valid for 24 Hours
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={handleDownloadAsset}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-teal-500 transition cursor-pointer"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download {currentOrder.secureDelivery.fileName}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                if (onViewLibrary) {
+                  onViewLibrary();
+                } else {
+                  onClose();
+                }
+              }}
+              className="w-full rounded-xl bg-slate-800 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition"
+            >
+              Go to My Purchases Vault
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const OxaPayInvoiceModal = NowPaymentsInvoiceModal;

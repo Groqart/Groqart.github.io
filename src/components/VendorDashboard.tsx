@@ -150,7 +150,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
             </span>
           </div>
           <p className="text-sm text-slate-400 mt-1">
-            Manage your digital assets, upload updates, and receive automated OxaPay crypto payouts.
+            Manage your digital assets, upload updates, and receive automated NOWPayments crypto payouts.
           </p>
         </div>
 
@@ -186,7 +186,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
             ${stats.totalRevenueUSD.toLocaleString()}
           </div>
           <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-            <span className="text-emerald-400 font-semibold">{stats.totalSalesCount} units</span> sold via OxaPay
+            <span className="text-emerald-400 font-semibold">{stats.totalSalesCount} units</span> sold via NOWPayments
           </p>
         </div>
 
@@ -365,7 +365,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-cyan-400" />
-                Request OxaPay Crypto Payout
+                Request NOWPayments Crypto Payout
               </h3>
               <button
                 onClick={() => setShowPayoutModal(false)}

@@ -3,4 +3,10 @@
   "name": "nexusbyte-backend",
   "main": "worker.js",
   "compatibility_date": "2026-11-08"
+"d1_databases": [
+    {
+      "binding": "DB",
+      "database_id": "13e08eb2-6c0c-4e69-9aa8-e55c8ae0465a"
+    }
+  ],
 }

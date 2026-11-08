@@ -1,20 +1,58 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Groqart — Platform for Independent Software Developers
 
-# Run and deploy your AI Studio app
+**Groqart** — это современная веб-платформа, созданная для того, чтобы независимые разработчики со всего мира могли размещать, продвигать и продавать свои программные продукты: скрипты, плагины, утилиты и другие цифровые товары.
 
-This contains everything you need to run your app locally.
+---
 
-View your app in AI Studio: https://ai.studio/apps/c1cb3e6c-0e9f-45c1-b8e2-eceec474bcff
+## 🛠 Технологический стек
 
-## Run Locally
+Проект построен на базе современных и быстрых инструментов разработки:
+* **Фронтенд:** Vite + TypeScript
+* **Среда выполнения / Сервер:** Bun / Node.js
+* **Бэкенд:** Автономный сервер (`server.ts`) + Cloudflare Workers (`Workers/nexusbyte-backend`)
 
-**Prerequisites:**  Node.js
+---
 
+## 🚀 Быстрый запуск (Локальная разработка)
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Для запуска проекта вам понадобится установленный **Node.js** (или **Bun** для максимальной скорости).
+
+### 1. Клонирование репозитория
+```bash
+git clone https://github.com
+cd Groqart.github.io
+```
+
+### 2. Установка зависимостей
+Используйте ваш пакетный менеджер:
+```bash
+npm install
+# или, если используете Bun:
+bun install
+```
+
+### 3. Настройка переменных окружения
+Создайте файл `.env.local` (или `.env`) в корневой папке проекта на основе шаблона `.env.example` и добавьте ваши ключи:
+```bash
+# Пример для .env.local
+GEMINI_API_KEY=ваш_ключ_api_gemini
+```
+
+### 4. Запуск приложения
+Запустите локальный сервер для разработки:
+```bash
+npm run dev
+# или для запуска через Bun:
+bun run dev
+```
+После этого откройте в браузере адрес, указанный в терминале (обычно `http://localhost:5173`).
+
+---
+
+## 📂 Структура проекта
+
+* `src/` — Исходный код фронтенд-приложения (компоненты, UI, логика).
+* `Workers/nexusbyte-backend` — Логика бэкенд-воркеров для обработки запросов.
+* `server.ts` — Основной файл локального сервера.
+* `index.html` — Главная точка входа в веб-приложение.
+* `vite.config.ts` / `tsconfig.json` — Конфигурации сборщика Vite и компилятора TypeScript.

@@ -383,5 +383,5 @@ async function generateTOTP(secret) {
                  ((sigBytes[offset + 2] & 0xff) << 8) |
                  (sigBytes[offset + 3] & 0xff);
 
-  return (binary % 1000000).toString().padStart(7, '0');
+  return (binary % 1000000).toString().padStart(6, '0');
 }

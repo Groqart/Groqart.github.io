@@ -60,7 +60,7 @@ test('signed download token roundtrip succeeds with matching secret', () => {
 });
 
 test('verifyNowPaymentsIpnSignature verifies sorted JSON HMAC-SHA512 header correctly', () => {
-  const ipnSecret = 'bc2ziZ+I+Xa4lpmE9zv4aQBrmLbe1xVI';
+  const ipnSecret = '0';
   const notificationPayload = {
     payment_id: 5077125035,
     payment_status: 'finished',

@@ -38,8 +38,8 @@ import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 
 // NOWPayments Gateway Configuration (Live Production Credentials)
 const nowPaymentsConfig: NowPaymentsConfig = {
-  apiKey: process.env.NOWPAYMENTS_API_KEY || '18AMNE0-FTRM0YT-PA99F79-T7SB559',
-  ipnSecret: process.env.NOWPAYMENTS_IPN_SECRET || 'bc2ziZ+I+Xa4lpmE9zv4aQBrmLbe1xVI',
+  apiKey: process.env.NOWPAYMENTS_API_KEY || '0',
+  ipnSecret: process.env.NOWPAYMENTS_IPN_SECRET || '0',
   sandboxMode: false,
 };
 

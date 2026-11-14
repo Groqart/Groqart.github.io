@@ -1,3 +1,4 @@
+// Frontend/src/utils/localStore.ts
 import { Product, Order, VendorPayout } from '../types/marketplace';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 
@@ -5,7 +6,10 @@ const PRODUCTS_KEY = 'nexusbyte_products_cache';
 const ORDERS_KEY = 'nexusbyte_orders_cache';
 const PAYOUTS_KEY = 'nexusbyte_payouts_cache';
 
+const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+
 export function getLocalProducts(): Product[] {
+  if (!isBrowser) return INITIAL_PRODUCTS;
   try {
     const raw = localStorage.getItem(PRODUCTS_KEY);
     if (raw) {
@@ -17,12 +21,12 @@ export function getLocalProducts(): Product[] {
   } catch (e) {
     console.error('Failed to read local products', e);
   }
-  // Initialize with default products
   saveLocalProducts(INITIAL_PRODUCTS);
   return INITIAL_PRODUCTS;
 }
 
 export function saveLocalProducts(products: Product[]): void {
+  if (!isBrowser) return;
   try {
     localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
   } catch (e) {
@@ -45,6 +49,7 @@ export function deleteLocalProduct(productId: string): Product[] {
 }
 
 export function getLocalOrders(): Order[] {
+  if (!isBrowser) return [];
   try {
     const raw = localStorage.getItem(ORDERS_KEY);
     if (raw) {
@@ -60,6 +65,7 @@ export function getLocalOrders(): Order[] {
 }
 
 export function saveLocalOrders(orders: Order[]): void {
+  if (!isBrowser) return;
   try {
     localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
   } catch (e) {
@@ -99,6 +105,7 @@ export function updateLocalOrderStatus(orderId: string, status: Order['status'])
 }
 
 export function getLocalPayouts(): VendorPayout[] {
+  if (!isBrowser) return [];
   try {
     const raw = localStorage.getItem(PAYOUTS_KEY);
     if (raw) {
@@ -113,6 +120,7 @@ export function getLocalPayouts(): VendorPayout[] {
 export function saveLocalPayout(payout: VendorPayout): VendorPayout[] {
   const current = getLocalPayouts();
   const updated = [payout, ...current];
+  if (!isBrowser) return updated;
   try {
     localStorage.setItem(PAYOUTS_KEY, JSON.stringify(updated));
   } catch (e) {

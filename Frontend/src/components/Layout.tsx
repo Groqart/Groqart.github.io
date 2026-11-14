@@ -1,3 +1,4 @@
+// Frontend/src/components/Layout.tsx
 import React from 'react';
 import { Outlet, Link, useNavigate } from 'react-router';
 import { Cpu, CheckCircle } from 'lucide-react';
@@ -6,7 +7,7 @@ import { CartDrawer } from './CartDrawer';
 import { OxaPayInvoiceModal } from './OxaPayInvoiceModal';
 import { useMarketplace } from '../context/MarketplaceContext';
 
-export const Layout: React.FC = () => {
+export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const {
     orders,
@@ -44,9 +45,9 @@ export const Layout: React.FC = () => {
         purchasesCount={paidOrdersCount}
       />
 
-      {/* Route Outlet */}
+      {/* Route Content: render children or Outlet */}
       <main className="flex-1">
-        <Outlet />
+        {children || <Outlet />}
       </main>
 
       {/* OxaPay / NOWPayments Modal */}

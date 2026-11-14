@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+# Разрешаем доступ ИИ-поисковикам (для GEO)
+User-agent: GPTBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+# Укажите адрес вашей карты сайта (замените домен на ваш реальный)
+Sitemap: https://nexusbyte.de5.net/sitemap.xml

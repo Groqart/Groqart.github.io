@@ -1,5 +1,7 @@
+// Frontend/src/context/MarketplaceContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Product, Order, UserRole, CryptoCurrency } from '../types/marketplace';
+import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import {
   getLocalProducts,
   saveLocalProducts,
@@ -40,7 +42,8 @@ interface MarketplaceContextType {
 const MarketplaceContext = createContext<MarketplaceContextType | undefined>(undefined);
 
 export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [products, setProducts] = useState<Product[]>([]);
+  // ВАЖНО: INITIAL_PRODUCTS сразу на старте гарантирует, что пререндер сгенерирует полные карточки для SEO/GEO!
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<Product[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -63,8 +66,8 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
         saveLocalProducts(data.products);
         return;
       }
-    } catch (err) {
-      console.warn('Backend API unreachable, using local storage products', err);
+    } catch {
+      // Игнорируем в offline/static
     }
     setProducts(getLocalProducts());
   };
@@ -78,8 +81,8 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
         setOrders(data.orders);
         return;
       }
-    } catch (err) {
-      console.warn('Backend API unreachable, using local orders cache', err);
+    } catch {
+      // Игнорируем в offline/static
     }
     setOrders(getLocalOrders());
   };
@@ -123,7 +126,7 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
           createdOrder = data.order;
         }
       } catch (err) {
-        console.warn('API invoice creation unavailable, generating client sandbox invoice', err);
+        console.warn('API invoice offline, generating sandbox invoice', err);
       }
 
       if (!createdOrder) {

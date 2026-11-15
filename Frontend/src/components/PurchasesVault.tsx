@@ -6,10 +6,11 @@ import {
   Check,
   Clock,
   ShieldCheck,
-  ExternalLink,
   Archive,
   RefreshCw,
   ShoppingBag,
+  Mail,
+  Search,
 } from 'lucide-react';
 import { Order } from '../types/marketplace';
 
@@ -26,6 +27,21 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
 }) => {
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [revealedKeyIds, setRevealedKeyIds] = useState<Record<string, boolean>>({});
+  const [buyerEmail, setBuyerEmail] = useState('');
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setBuyerEmail(localStorage.getItem('nexusbyte_buyer_email') || '');
+    }
+  }, []);
+
+  const handleApplyEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (typeof window !== 'undefined' && buyerEmail.trim()) {
+      localStorage.setItem('nexusbyte_buyer_email', buyerEmail.trim().toLowerCase());
+      onRefreshOrders();
+    }
+  };
 
   const copyKey = (key: string, orderId: string) => {
     navigator.clipboard.writeText(key);
@@ -51,49 +67,12 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
     return `${hours}h ${mins}m remaining`;
   };
 
-  const handleDownloadAsset = async (order: Order) => {
-    try {
-      const res = await fetch(`/api/downloads/${order.secureDelivery?.downloadToken}`);
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && !contentType.includes('text/html')) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = order.secureDelivery?.fileName || 'digital-asset.zip';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        return;
-      }
-    } catch (err) {
-      console.warn('API download not available, downloading local package bundle', err);
+  const handleDownloadAsset = (order: Order) => {
+    if (order.secureDelivery?.downloadUrl) {
+      window.location.href = order.secureDelivery.downloadUrl;
+      return;
     }
-
-    // Static fallback
-    const content = `=====================================================
-${order.productTitle.toUpperCase()} - SECURE DELIVERY PACKAGE
-=====================================================
-Order ID: ${order.id}
-Track ID: ${order.oxaInvoice.trackId}
-Delivered To: ${order.buyerEmail}
-Timestamp: ${new Date().toISOString()}
-License Key: ${order.secureDelivery?.licenseKey || 'N/A'}
-Status: Verified Paid via NOWPayments (${order.oxaInvoice.cryptoCurrency})
-
-[PACKAGE CONTENTS & INSTALLATION]
-1. Source code archive and documentation.
-2. License: Commercial Single Operator.
-3. Thank you for purchasing on NexusByte Marketplace!`;
-
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${order.secureDelivery?.fileName || 'digital-package'}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    alert('Download link expired. Click Refresh to generate a new 15-minute link from Backblaze B2.');
   };
 
   return (
@@ -132,15 +111,57 @@ Status: Verified Paid via NOWPayments (${order.oxaInvoice.cryptoCurrency})
         </div>
       </div>
 
+      {/* Email Recovery Form */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 mb-8">
+        <form
+          onSubmit={handleApplyEmail}
+          className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end"
+        >
+          <div className="flex-1">
+            <label
+              htmlFor="buyer-email"
+              className="text-xs font-semibold text-slate-300 flex items-center gap-1.5 mb-1.5"
+            >
+              <Mail className="h-3.5 w-3.5 text-cyan-400" />
+              Buyer email
+            </label>
+            <input
+              id="buyer-email"
+              type="email"
+              value={buyerEmail}
+              onChange={(e) => setBuyerEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
+              required
+            />
+            <p className="mt-1 text-[11px] text-slate-500">
+              Enter the email you used at checkout to restore your purchases on this device.
+            </p>
+          </div>
+          <button
+            type="submit"
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 shadow hover:bg-cyan-400 transition"
+          >
+            <Search className="h-3.5 w-3.5" />
+            Find Purchases
+          </button>
+        </form>
+      </div>
+
       {/* Orders List */}
       {paidOrders.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-800/80 bg-slate-900/40 p-12 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800 text-slate-400 mb-4">
             <Archive className="h-7 w-7" />
           </div>
-          <h3 className="text-base font-bold text-white">No digital purchases found yet</h3>
+          <h3 className="text-base font-bold text-white">
+            {buyerEmail ? 'No digital purchases found for this email' : 'Enter your buyer email to restore purchases'}
+          </h3>
           <p className="text-xs text-slate-400 max-w-sm mt-1 mb-6">
-            Pick a script, SaaS template, bot or 3D asset from the marketplace and pay with NOWPayments crypto to see it here.
+            {buyerEmail
+              ? 'Double-check the email or pick a script, SaaS template, bot or 3D asset from the marketplace and pay with NOWPayments crypto.'
+              : 'We use your checkout email to look up paid orders across devices. No account or password required.'}
           </p>
           <button
             onClick={onBrowseMarketplace}

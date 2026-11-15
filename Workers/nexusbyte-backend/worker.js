@@ -138,7 +138,7 @@ async function handleGetProducts(env, cors) {
 async function handleCreateProduct(request, env, cors) {
   const authToken = request.headers.get('x-marketplace-token');
   if (!env.MARKETPLACE_SECRET_TOKEN || authToken !== env.MARKETPLACE_SECRET_TOKEN) {
-    return jsonResponse({ error: 'Unauthorized: invalid vendor token' }, 401, cors);
+    return jsonResponse({ error: 'Unauthorized: invalid vendor token Сервер получил: "${env.MARKETPLACE_SECRET_TOKEN}"' }, 401, cors);
   }
 
   const body = await request.json();

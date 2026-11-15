@@ -83,6 +83,21 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-black text-white tracking-tight sm:text-3xl">
               Digital Assets Library
+              <form onSubmit={handleApplyEmail} className="mb-6 flex gap-2 max-w-md text-xs">
+        <input
+          type="email"
+          value={buyerEmail}
+          onChange={(e) => setBuyerEmail(e.target.value)}
+          placeholder="Enter your purchase email to load assets..."
+          className="flex-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
+        />
+        <button
+          type="submit"
+          className="rounded-lg bg-slate-800 px-4 py-2 font-semibold text-cyan-300 hover:bg-slate-700"
+        >
+          Load Purchases
+        </button>
+      </form>
             </h1>
             <span className="rounded-full bg-cyan-950 px-2.5 py-0.5 text-xs font-semibold text-cyan-400 border border-cyan-800">
               {paidOrders.length} {paidOrders.length === 1 ? 'Product' : 'Products'}

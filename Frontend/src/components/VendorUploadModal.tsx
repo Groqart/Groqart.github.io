@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { X, Upload, Plus, Trash2, Code2, ShieldCheck, Key, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Upload, Lock, FileArchive } from 'lucide-react';
 import { ProductCategory, DeliveryType, LicenseType, Product } from '../types/marketplace';
-import { addLocalProduct } from '../utils/localStore';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 interface VendorUploadModalProps {
   onClose: () => void;
@@ -12,152 +13,162 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
   onClose,
   onProductCreated,
 }) => {
+  const [vendorToken, setVendorToken] = useState('');
+  const [sellerId, setSellerId] = useState('vendor_default');
   const [title, setTitle] = useState('');
   const [tagline, setTagline] = useState('');
   const [description, setDescription] = useState('');
   const [priceUSD, setPriceUSD] = useState(49);
   const [category, setCategory] = useState<ProductCategory>('Scripts & Code');
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('both');
-  const [licenseType, setLicenseType] = useState<LicenseType>('Commercial');
+  const [licenseType] = useState<LicenseType>('Commercial');
   const [version, setVersion] = useState('v1.0.0');
-  const [fileName, setFileName] = useState('');
-  const [fileSize, setFileSize] = useState('15.4 MB');
-  const [fileFormat, setFileFormat] = useState('ZIP Source Archive');
-  const [features, setFeatures] = useState<string[]>([
-    'Clean modular architecture with full TypeScript types',
-    'Instant NOWPayments IPN payment verification',
-  ]);
-  const [newFeatureText, setNewFeatureText] = useState('');
-  const [tagsInput, setTagsInput] = useState('TypeScript, Node.js, NOWPayments');
-  const [codeSnippet, setCodeSnippet] = useState(
-    `export async function handlePayment(webhookPayload) {\n  console.log("Verified digital good delivery:", webhookPayload.trackId);\n}`
-  );
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<string>('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleAddFeature = () => {
-    if (newFeatureText.trim()) {
-      setFeatures([...features, newFeatureText.trim()]);
-      setNewFeatureText('');
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setVendorToken(localStorage.getItem('nexusbyte_vendor_token') || '');
+      setSellerId(localStorage.getItem('nexusbyte_vendor_id') || 'vendor_default');
     }
-  };
+  }, []);
 
-  const handleRemoveFeature = (idx: number) => {
-    setFeatures(features.filter((_, i) => i !== idx));
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
+
+    if (!vendorToken.trim()) {
+      setErrorMsg('Enter your MARKETPLACE_SECRET_TOKEN to authorize upload.');
+      return;
+    }
+    if (!selectedFile) {
+      setErrorMsg('Please attach a digital product file (.zip, .tar.gz, .pdf, etc.).');
+      return;
+    }
     if (!title.trim() || priceUSD <= 0) return;
+
+    localStorage.setItem('nexusbyte_vendor_token', vendorToken.trim());
+    localStorage.setItem('nexusbyte_vendor_id', sellerId.trim() || 'vendor_default');
 
     try {
       setIsSubmitting(true);
-      const tags = tagsInput
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
 
-      const generatedFileName = fileName.trim() || `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${version}.zip`;
+      // 1. Запрашиваем временную ссылку на загрузку в Backblaze B2
+      setUploadProgress('1/3 Requesting Backblaze B2 upload link...');
+      const urlRes = await fetch(`${API_BASE}/api/upload-url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-marketplace-token': vendorToken.trim(),
+        },
+        body: JSON.stringify({ fileName: selectedFile.name }),
+      });
 
-      const payload = {
-        title,
-        tagline: tagline || 'High-performance digital asset for modern developers',
-        description: description || title,
+      const urlData = await urlRes.json();
+      if (!urlRes.ok || !urlData.uploadUrl || !urlData.fileKey) {
+        throw new Error(urlData.error || 'Failed to get Backblaze B2 upload URL');
+      }
+
+      // 2. Загружаем файл напрямую в Backblaze B2
+      setUploadProgress(`2/3 Uploading ${selectedFile.name} to Backblaze B2...`);
+      const putRes = await fetch(urlData.uploadUrl, {
+        method: 'PUT',
+        body: selectedFile,
+      });
+
+      if (!putRes.ok) {
+        throw new Error(`Backblaze B2 rejected upload (HTTP ${putRes.status}). Check B2 CORS settings.`);
+      }
+
+      // 3. Сохраняем метаданные товара в базу D1
+      setUploadProgress('3/3 Saving product to Cloudflare D1...');
+      const fileSizeStr = formatBytes(selectedFile.size);
+      const createRes = await fetch(`${API_BASE}/api/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-marketplace-token': vendorToken.trim(),
+        },
+        body: JSON.stringify({
+          seller_id: sellerId.trim() || 'vendor_default',
+          title: title.trim(),
+          tagline: tagline.trim() || 'Digital software package',
+          description: description.trim() || title.trim(),
+          priceUSD: Number(priceUSD),
+          category,
+          deliveryType,
+          version,
+          b2_file_key: urlData.fileKey,
+          fileName: selectedFile.name,
+          fileSize: fileSizeStr,
+        }),
+      });
+
+      const createData = await createRes.json();
+      if (!createRes.ok || !createData.id) {
+        throw new Error(createData.error || 'Failed to save product to D1 database');
+      }
+
+      const createdProduct: Product = {
+        id: createData.id,
+        slug: createData.id,
+        title: title.trim(),
+        tagline: tagline.trim() || 'Digital software package',
+        description: description.trim() || title.trim(),
         priceUSD: Number(priceUSD),
         category,
         deliveryType,
         licenseType,
         version,
-        fileName: generatedFileName,
-        fileSize,
-        fileFormat,
-        tags: tags.length ? tags : ['Software', 'Digital Good'],
-        features,
-        codeSnippetPreview: {
-          language: 'typescript',
-          filename: 'index.ts',
-          code: codeSnippet,
+        fileInfo: {
+          fileName: selectedFile.name,
+          fileSize: fileSizeStr,
+          format: 'Archive',
         },
-        downloadContentSample: `=====================================================\n${title.toUpperCase()} ${version}\n=====================================================\nDigital product delivered securely via NexusByte.\nLicense: ${licenseType}\nThank you for supporting independent software creators!`,
+        vendorId: sellerId.trim() || 'vendor_default',
+        vendorName: sellerId.trim() || 'vendor_default',
+        vendorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
+        rating: 5.0,
+        reviewsCount: 1,
+        salesCount: 0,
+        bannerGradient: 'from-cyan-600 via-blue-600 to-indigo-700',
+        tags: [category],
+        features: ['Instant crypto checkout via NOWPayments', 'Protected Backblaze B2 delivery'],
+        changelog: [],
+        downloadContentSample: '',
+        createdAt: new Date().toISOString(),
       };
-
-      let createdProduct: Product | null = null;
-
-      try {
-        const res = await fetch('/api/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          const data = await res.json();
-          createdProduct = data.product;
-        }
-      } catch (networkErr) {
-        console.warn('Backend offline or static hosting, falling back to local storage', networkErr);
-      }
-
-      // If backend was not reached or returned non-JSON (like static Cloudflare Pages), create locally
-      if (!createdProduct) {
-        createdProduct = {
-          id: `prod_local_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          title: payload.title,
-          slug: payload.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-          tagline: payload.tagline,
-          description: payload.description,
-          priceUSD: payload.priceUSD,
-          category: payload.category,
-          deliveryType: payload.deliveryType,
-          licenseType: payload.licenseType,
-          version: payload.version,
-          fileInfo: {
-            fileName: payload.fileName,
-            fileSize: payload.fileSize,
-            format: payload.fileFormat,
-          },
-          licenseKeysAvailable: payload.deliveryType === 'file' ? undefined : 25,
-          vendorId: 'vendor_user_local',
-          vendorName: 'You (Vendor)',
-          vendorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
-          rating: 5.0,
-          reviewsCount: 1,
-          salesCount: 0,
-          bannerGradient: 'from-cyan-600 via-blue-600 to-indigo-700',
-          tags: payload.tags,
-          features: payload.features,
-          changelog: [{ version: payload.version, date: new Date().toISOString().split('T')[0], changes: ['Initial release'] }],
-          codeSnippetPreview: payload.codeSnippetPreview,
-          downloadContentSample: payload.downloadContentSample,
-          createdAt: new Date().toISOString(),
-        };
-        addLocalProduct(createdProduct);
-      }
 
       onProductCreated(createdProduct);
       onClose();
-    } catch (err) {
-      console.error('Failed to create product', err);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Upload failed');
     } finally {
       setIsSubmitting(false);
+      setUploadProgress('');
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl my-8 overflow-hidden">
-        {/* Header */}
+      <div className="relative w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl my-8">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
               <Upload className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Publish New Digital Good</h3>
-              <p className="text-xs text-slate-400">Configure file package, license keys, and NOWPayments crypto pricing</p>
+              <h3 className="text-base font-bold text-white">Upload to Backblaze B2 & Publish</h3>
+              <p className="text-xs text-slate-400">File goes directly to private B2 storage; metadata saved to D1</p>
             </div>
           </div>
-
           <button
             onClick={onClose}
             aria-label="Close upload modal"
@@ -168,7 +179,63 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-xs">
-          {/* Title & Category */}
+          {errorMsg && (
+            <div className="rounded-lg border border-rose-500/40 bg-rose-950/50 p-3 text-rose-300">
+              {errorMsg}
+            </div>
+          )}
+
+          {/* Авторизация продавца */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <div>
+              <label className="text-slate-300 font-semibold flex items-center gap-1 mb-1">
+                <Lock className="h-3 w-3 text-cyan-400" />
+                Vendor Secret Token *
+              </label>
+              <input
+                type="password"
+                required
+                value={vendorToken}
+                onChange={(e) => setVendorToken(e.target.value)}
+                placeholder="MARKETPLACE_SECRET_TOKEN"
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-slate-300 font-semibold block mb-1">Seller ID</label>
+              <input
+                type="text"
+                value={sellerId}
+                onChange={(e) => setSellerId(e.target.value)}
+                placeholder="vendor_default"
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Выбор файла */}
+          <div>
+            <label className="text-slate-300 font-semibold block mb-1">Digital Product File *</label>
+            <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-cyan-500/40 bg-slate-950 px-4 py-3 hover:border-cyan-400 transition">
+              <div className="flex items-center gap-2.5">
+                <FileArchive className="h-5 w-5 text-cyan-400" />
+                <span className="text-slate-200">
+                  {selectedFile
+                    ? `${selectedFile.name} (${formatBytes(selectedFile.size)})`
+                    : 'Click to select .zip / .tar.gz / .pdf file'}
+                </span>
+              </div>
+              <input
+                type="file"
+                className="hidden"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              />
+              <span className="rounded bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-cyan-300">
+                Browse
+              </span>
+            </label>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
               <label className="text-slate-300 font-semibold block mb-1">Product Title *</label>
@@ -178,10 +245,9 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Next.js 15 MicroSaaS Starter"
-                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
               />
             </div>
-
             <div>
               <label className="text-slate-300 font-semibold block mb-1">Category</label>
               <select
@@ -199,153 +265,70 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
             </div>
           </div>
 
-          {/* Tagline */}
           <div>
             <label className="text-slate-300 font-semibold block mb-1">Short Tagline</label>
             <input
               type="text"
               value={tagline}
               onChange={(e) => setTagline(e.target.value)}
-              placeholder="e.g. Production-ready boilerplate with automated crypto billing"
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              placeholder="Short summary for product card"
+              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
             />
           </div>
 
-          {/* Price, Version & Delivery Type */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="text-slate-300 font-semibold block mb-1">Price (USD) *</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-slate-400">$</span>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={priceUSD}
-                  onChange={(e) => setPriceUSD(Number(e.target.value))}
-                  className="w-full rounded-lg border border-slate-800 bg-slate-950 pl-7 pr-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
-                />
-              </div>
+              <input
+                type="number"
+                min="1"
+                step="0.01"
+                required
+                value={priceUSD}
+                onChange={(e) => setPriceUSD(Number(e.target.value))}
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
+              />
             </div>
-
             <div>
-              <label className="text-slate-300 font-semibold block mb-1">Release Version</label>
+              <label className="text-slate-300 font-semibold block mb-1">Version</label>
               <input
                 type="text"
                 value={version}
                 onChange={(e) => setVersion(e.target.value)}
-                placeholder="v1.0.0"
                 className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
               />
             </div>
-
             <div>
-              <label className="text-slate-300 font-semibold block mb-1">Delivery Mechanism</label>
+              <label className="text-slate-300 font-semibold block mb-1">Delivery</label>
               <select
                 value={deliveryType}
                 onChange={(e) => setDeliveryType(e.target.value as DeliveryType)}
                 className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
               >
-                <option value="both">File Download + License Key</option>
-                <option value="file">File Download Only</option>
-                <option value="license_key">License Key Only</option>
+                <option value="both">File + License Key</option>
+                <option value="file">File Only</option>
+                <option value="license_key">License Key</option>
               </select>
             </div>
           </div>
 
-          {/* Description */}
           <div>
-            <label className="text-slate-300 font-semibold block mb-1">Product Description</label>
+            <label className="text-slate-300 font-semibold block mb-1">Description</label>
             <textarea
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe your software, features, tech stack, and what is inside the package..."
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
-            />
-          </div>
-
-          {/* File Name & Size */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-slate-300 font-semibold block mb-1">Package File Name</label>
-              <input
-                type="text"
-                value={fileName}
-                onChange={(e) => setFileName(e.target.value)}
-                placeholder="e.g. app-source-v1.zip"
-                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-slate-300 font-semibold block mb-1">File Size & Format</label>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={fileSize}
-                  onChange={(e) => setFileSize(e.target.value)}
-                  placeholder="14.5 MB"
-                  className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={fileFormat}
-                  onChange={(e) => setFileFormat(e.target.value)}
-                  placeholder="ZIP Archive"
-                  className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div>
-            <label className="text-slate-300 font-semibold block mb-1">Tags (comma separated)</label>
-            <input
-              type="text"
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-              placeholder="React, Next.js, Python, Crypto"
+              placeholder="Describe what's inside the archive..."
               className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
             />
           </div>
 
-          {/* Features Bullets */}
-          <div>
-            <label className="text-slate-300 font-semibold block mb-1">Key Feature Highlights</label>
-            <div className="space-y-1.5 mb-2">
-              {features.map((feat, idx) => (
-                <div key={idx} className="flex items-center justify-between rounded bg-slate-950 px-3 py-1.5 border border-slate-800">
-                  <span className="text-slate-300">{feat}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveFeature(idx)}
-                    className="text-slate-500 hover:text-rose-400"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
+          {uploadProgress && (
+            <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/30 p-3 text-cyan-300 font-mono">
+              {uploadProgress}
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newFeatureText}
-                onChange={(e) => setNewFeatureText(e.target.value)}
-                placeholder="Add another feature bullet point..."
-                className="flex-1 rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-white focus:border-cyan-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleAddFeature}
-                className="rounded-lg bg-slate-800 px-3 py-1.5 font-medium text-slate-200 hover:bg-slate-700"
-              >
-                Add
-              </button>
-            </div>
-          </div>
+          )}
 
-          {/* Submit */}
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
             <button
               type="button"
@@ -359,7 +342,7 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
               disabled={isSubmitting}
               className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 font-bold text-white shadow-md shadow-cyan-500/25 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50"
             >
-              {isSubmitting ? 'Publishing...' : 'Publish to Marketplace'}
+              {isSubmitting ? 'Uploading...' : 'Upload & Publish'}
             </button>
           </div>
         </form>

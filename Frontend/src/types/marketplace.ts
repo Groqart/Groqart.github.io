@@ -99,6 +99,7 @@ export interface Order {
   oxaInvoice: NowPaymentsInvoice;
   paymentInvoice?: NowPaymentsInvoice;
   secureDelivery?: {
+    downloadUrl?: string;
     downloadToken?: string;
     downloadExpiresAt?: number;
     downloadCount: number;

@@ -201,7 +201,7 @@ async function handleDeleteProduct(id, request, env, cors) {
 async function handleGetUploadUrl(request, env, cors) {
   const authToken = request.headers.get('x-marketplace-token');
   if (!env.MARKETPLACE_SECRET_TOKEN || authToken !== env.MARKETPLACE_SECRET_TOKEN) {
-    return jsonResponse({ error: 'Unauthorized: vendor token required to upload files Дыбил: "${env.MARKETPLACE_SECRET_TOKEN}"' }, 401, cors);
+    return jsonResponse({ error: `Unauthorized: vendor token required to upload files Дыбил: "${env.MARKETPLACE_SECRET_TOKEN}"` }, 401, cors);
   }
 
   const { fileName } = await request.json();

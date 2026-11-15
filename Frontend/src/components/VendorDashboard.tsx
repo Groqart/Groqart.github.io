@@ -4,19 +4,16 @@ import {
   DollarSign,
   Package,
   TrendingUp,
-  ArrowUpRight,
-  ShieldCheck,
   Trash2,
   Eye,
   Wallet,
-  Clock,
-  CheckCircle2,
   X,
   Zap,
 } from 'lucide-react';
-import { Product, Order, VendorPayout, CryptoCurrency } from '../types/marketplace';
+import { Product } from '../types/marketplace';
 import { VendorUploadModal } from './VendorUploadModal';
-import { getLocalPayouts, saveLocalPayout, getLocalOrders } from '../utils/localStore';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 interface VendorDashboardProps {
   products: Product[];
@@ -33,112 +30,91 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 }) => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
-  const [payoutAmount, setPayoutAmount] = useState<number>(100);
-  const [payoutCurrency, setPayoutCurrency] = useState<CryptoCurrency>('USDT');
-  const [payoutAddress, setPayoutAddress] = useState('TYDzsYUEW6v18K9vC7mtestaddress999');
-  const [payoutsList, setPayoutsList] = useState<VendorPayout[]>([]);
+  const [sellerId, setSellerId] = useState('vendor_default');
+  const [vendorToken, setVendorToken] = useState('');
+  const [payoutAmount, setPayoutAmount] = useState<number>(10);
+  const [payoutStatus, setPayoutStatus] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalProducts: 0,
     totalSalesCount: 0,
     totalRevenueUSD: 0,
     netEarningsUSD: 0,
     availableBalanceUSD: 0,
-    recentOrders: [] as Order[],
   });
 
-  const fetchStats = async () => {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSellerId(localStorage.getItem('nexusbyte_vendor_id') || 'vendor_default');
+      setVendorToken(localStorage.getItem('nexusbyte_vendor_token') || '');
+    }
+  }, []);
+
+  const fetchStats = async (id = sellerId) => {
     try {
-      const res = await fetch('/api/vendor/stats');
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
+      const res = await fetch(`${API_BASE}/api/vendor/stats?vendorId=${encodeURIComponent(id)}`);
+      if (res.ok) {
         const data = await res.json();
         setStats(data);
-        if (data.payouts) setPayoutsList(data.payouts);
-        return;
       }
-    } catch (err) {
-      console.warn('Vendor stats API unreachable, calculating from local state', err);
+    } catch {
+      // ignore offline
     }
-
-    // Static fallback calculations
-    const localOrders = getLocalOrders().filter((o) => o.status === 'paid');
-    const localPayouts = getLocalPayouts();
-    const totalRev = localOrders.reduce((acc, o) => acc + o.priceUSD, 0);
-    const net = totalRev * 0.95;
-    const paidOut = localPayouts.reduce((acc, p) => acc + p.amountUSD, 0);
-
-    setStats({
-      totalProducts: products.length,
-      totalSalesCount: localOrders.length,
-      totalRevenueUSD: totalRev,
-      netEarningsUSD: net,
-      availableBalanceUSD: Math.max(0, net - paidOut),
-      recentOrders: localOrders.slice(0, 5),
-    });
-    setPayoutsList(localPayouts);
   };
 
   useEffect(() => {
-    fetchStats();
-  }, [products]);
+    fetchStats(sellerId);
+  }, [products, sellerId]);
 
   const handleRequestPayout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!payoutAddress || payoutAmount <= 0) return;
+    setPayoutStatus(null);
+    if (!vendorToken.trim()) {
+      setPayoutStatus('Enter your MARKETPLACE_SECRET_TOKEN.');
+      return;
+    }
 
     try {
-      let success = false;
-      try {
-        const res = await fetch('/api/vendor/payout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amountUSD: payoutAmount,
-            cryptoCurrency: payoutCurrency,
-            cryptoAddress: payoutAddress,
-          }),
-        });
-        const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          success = true;
-        }
-      } catch (err) {
-        console.warn('API payout failed, saving locally', err);
+      const res = await fetch(`${API_BASE}/api/withdraw`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-marketplace-token': vendorToken.trim(),
+        },
+        body: JSON.stringify({
+          seller_id: sellerId,
+          amount_to_withdraw: payoutAmount,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPayoutStatus(data.error || 'Withdrawal failed');
+        return;
       }
-
-      if (!success) {
-        const newPayout: VendorPayout = {
-          id: `pay_loc_${Date.now()}`,
-          vendorId: 'vendor_user_local',
-          amountUSD: payoutAmount,
-          cryptoCurrency: payoutCurrency,
-          address: payoutAddress,
-          status: 'completed',
-          createdAt: new Date().toISOString(),
-        };
-        saveLocalPayout(newPayout);
-      }
-
       setShowPayoutModal(false);
-      fetchStats();
-    } catch (err) {
-      console.error('Payout error', err);
+      fetchStats(sellerId);
+    } catch {
+      setPayoutStatus('Network error during payout request');
     }
   };
 
   const handleDelete = async (id: string) => {
-    try {
-      await fetch(`/api/products/${id}`, { method: 'DELETE' });
-    } catch (err) {
-      console.warn('API delete failed, proceeding with local delete', err);
+    const token =
+      vendorToken ||
+      (typeof window !== 'undefined' ? window.prompt('Enter MARKETPLACE_SECRET_TOKEN to delete:') || '' : '');
+    if (!token) return;
+
+    const res = await fetch(`${API_BASE}/api/products/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-marketplace-token': token },
+    });
+    if (res.ok) {
+      onProductDeleted(id);
+      fetchStats(sellerId);
     }
-    onProductDeleted(id);
-    fetchStats();
   };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6 mb-8">
         <div>
           <div className="flex items-center gap-2">
@@ -146,21 +122,21 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               Vendor Studio & Financials
             </h1>
             <span className="rounded-full bg-cyan-950 px-2.5 py-0.5 text-xs font-semibold text-cyan-400 border border-cyan-800">
-              MERCHANT ACCOUNT
+              {sellerId}
             </span>
           </div>
           <p className="text-sm text-slate-400 mt-1">
-            Manage your digital assets, upload updates, and receive automated NOWPayments crypto payouts.
+            Manage digital assets in Backblaze B2 + D1 and withdraw earnings in USDC (Base).
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowPayoutModal(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:text-white transition shadow-sm"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:text-white transition"
           >
             <Wallet className="h-4 w-4 text-cyan-400" />
-            Request Crypto Payout
+            Withdraw USDC
           </button>
           <button
             onClick={() => setShowUploadModal(true)}
@@ -172,83 +148,53 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         </div>
       </div>
 
-      {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {/* Gross Revenue */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
             <span>Gross Sales</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <DollarSign className="h-4 w-4" />
-            </div>
+            <DollarSign className="h-4 w-4 text-emerald-400" />
           </div>
-          <div className="text-2xl font-extrabold text-white">
-            ${stats.totalRevenueUSD.toLocaleString()}
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-            <span className="text-emerald-400 font-semibold">{stats.totalSalesCount} units</span> sold via NOWPayments
-          </p>
+          <div className="text-2xl font-extrabold text-white">${stats.totalRevenueUSD.toFixed(2)}</div>
+          <p className="text-[11px] text-slate-400 mt-1">{stats.totalSalesCount} paid orders</p>
         </div>
 
-        {/* Net Earnings */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
             <span>Net Earnings (95%)</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              <TrendingUp className="h-4 w-4" />
-            </div>
+            <TrendingUp className="h-4 w-4 text-blue-400" />
           </div>
-          <div className="text-2xl font-extrabold text-white">
-            ${stats.netEarningsUSD.toLocaleString()}
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            5% marketplace escrow & routing fee
-          </p>
+          <div className="text-2xl font-extrabold text-white">${stats.netEarningsUSD.toFixed(2)}</div>
+          <p className="text-[11px] text-slate-400 mt-1">5% platform fee</p>
         </div>
 
-        {/* Available Balance */}
-        <div className="rounded-2xl border border-cyan-800/40 bg-gradient-to-br from-cyan-950/30 to-blue-950/30 p-5 shadow-sm">
+        <div className="rounded-2xl border border-cyan-800/40 bg-gradient-to-br from-cyan-950/30 to-blue-950/30 p-5">
           <div className="flex items-center justify-between text-xs text-cyan-300 mb-2">
             <span className="font-semibold">Withdrawable Balance</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-              <Zap className="h-4 w-4" />
-            </div>
+            <Zap className="h-4 w-4 text-cyan-400" />
           </div>
-          <div className="text-2xl font-extrabold text-cyan-300">
-            ${stats.availableBalanceUSD.toLocaleString()}
-          </div>
-          <p className="text-[11px] text-cyan-400/80 mt-1">
-            Instant settlement to crypto wallet
-          </p>
+          <div className="text-2xl font-extrabold text-cyan-300">${stats.availableBalanceUSD.toFixed(2)}</div>
+          <p className="text-[11px] text-cyan-400/80 mt-1">Min payout: $5.00 USDC</p>
         </div>
 
-        {/* Total Products */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Active Products</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              <Package className="h-4 w-4" />
-            </div>
+            <span>Catalog Products</span>
+            <Package className="h-4 w-4 text-purple-400" />
           </div>
-          <div className="text-2xl font-extrabold text-white">
-            {products.length}
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            All listed in public marketplace
-          </p>
+          <div className="text-2xl font-extrabold text-white">{products.length}</div>
+          <p className="text-[11px] text-slate-400 mt-1">Active listings</p>
         </div>
       </div>
 
-      {/* Main Table: Listed Products */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 mb-8">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-bold text-white flex items-center gap-2">
             <Package className="h-4 w-4 text-cyan-400" />
-            Your Digital Inventory ({products.length})
+            Digital Inventory ({products.length})
           </h2>
           <button
             onClick={() => setShowUploadModal(true)}
-            className="text-xs text-cyan-400 hover:underline flex items-center gap-1"
+            className="text-xs text-cyan-400 hover:underline"
           >
             + Add New
           </button>
@@ -262,33 +208,19 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 <th className="pb-3 font-semibold">Category</th>
                 <th className="pb-3 font-semibold">Version</th>
                 <th className="pb-3 font-semibold">Price</th>
-                <th className="pb-3 font-semibold">Delivery</th>
-                <th className="pb-3 font-semibold">Sales</th>
                 <th className="pb-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {products.map((prod) => (
                 <tr key={prod.id} className="hover:bg-slate-800/30 transition">
-                  <td className="py-3.5 pr-3 font-medium text-white max-w-[240px]">
+                  <td className="py-3.5 pr-3 font-medium text-white max-w-[260px]">
                     <div className="truncate font-semibold">{prod.title}</div>
                     <div className="text-[11px] text-slate-400 truncate">{prod.fileInfo.fileName}</div>
                   </td>
-                  <td className="py-3.5 pr-3 text-slate-300">
-                    <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px]">
-                      {prod.category}
-                    </span>
-                  </td>
+                  <td className="py-3.5 pr-3 text-slate-300">{prod.category}</td>
                   <td className="py-3.5 pr-3 font-mono text-cyan-400">{prod.version}</td>
                   <td className="py-3.5 pr-3 font-bold text-white">${prod.priceUSD}</td>
-                  <td className="py-3.5 pr-3 text-slate-400">
-                    {prod.deliveryType === 'both'
-                      ? 'File + Key'
-                      : prod.deliveryType === 'license_key'
-                      ? 'License Key'
-                      : 'File Download'}
-                  </td>
-                  <td className="py-3.5 pr-3 font-semibold text-emerald-400">{prod.salesCount}</td>
                   <td className="py-3.5 text-right space-x-2">
                     <button
                       onClick={() => onViewProduct(prod)}
@@ -312,130 +244,73 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         </div>
       </div>
 
-      {/* Payout History */}
-      {payoutsList.length > 0 && (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-          <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-emerald-400" />
-            Recent Crypto Payouts
-          </h2>
-          <div className="space-y-2">
-            {payoutsList.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between rounded-xl bg-slate-950 p-3 text-xs border border-slate-800"
-              >
-                <div>
-                  <div className="font-semibold text-white">
-                    ${p.amountUSD} USD Payout ({p.cryptoCurrency})
-                  </div>
-                  <div className="text-[11px] font-mono text-slate-400 truncate max-w-xs">
-                    Sent to: {p.address}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="rounded bg-emerald-950 px-2 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-800">
-                    COMPLETED
-                  </span>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    {new Date(p.createdAt).toLocaleDateString()}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Upload Modal */}
       {showUploadModal && (
         <VendorUploadModal
           onClose={() => setShowUploadModal(false)}
           onProductCreated={(p) => {
             onProductCreated(p);
-            fetchStats();
+            fetchStats(sellerId);
           }}
         />
       )}
 
-      {/* Payout Modal */}
       {showPayoutModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
           <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-cyan-400" />
-                Request NOWPayments Crypto Payout
+                Withdraw USDC (Base Network)
               </h3>
-              <button
-                onClick={() => setShowPayoutModal(false)}
-                className="text-slate-400 hover:text-white"
-              >
+              <button onClick={() => setShowPayoutModal(false)} className="text-slate-400 hover:text-white">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <form onSubmit={handleRequestPayout} className="space-y-4 text-xs">
+              {payoutStatus && (
+                <div className="rounded-lg border border-rose-500/40 bg-rose-950/40 p-2.5 text-rose-300">
+                  {payoutStatus}
+                </div>
+              )}
               <div>
-                <label className="text-slate-300 font-semibold block mb-1">
-                  Payout Amount (USD)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max={Math.max(1, stats.availableBalanceUSD)}
-                  value={payoutAmount}
-                  onChange={(e) => setPayoutAmount(Number(e.target.value))}
-                  className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
-                />
-                <span className="text-[11px] text-slate-400 mt-1 block">
-                  Available: ${stats.availableBalanceUSD} USD
-                </span>
-              </div>
-
-              <div>
-                <label className="text-slate-300 font-semibold block mb-1">
-                  Target Crypto Asset
-                </label>
-                <select
-                  value={payoutCurrency}
-                  onChange={(e) => setPayoutCurrency(e.target.value as CryptoCurrency)}
-                  className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
-                >
-                  <option value="USDT">USDT (Tether TRC20 - Instant, Low Fee)</option>
-                  <option value="BTC">Bitcoin (BTC)</option>
-                  <option value="ETH">Ethereum (ETH)</option>
-                  <option value="LTC">Litecoin (LTC)</option>
-                  <option value="SOL">Solana (SOL)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-slate-300 font-semibold block mb-1">
-                  Destination Wallet Address
-                </label>
+                <label className="text-slate-300 font-semibold block mb-1">Seller ID</label>
                 <input
                   type="text"
-                  required
-                  value={payoutAddress}
-                  onChange={(e) => setPayoutAddress(e.target.value)}
-                  placeholder="Paste your recipient address..."
-                  className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white font-mono focus:border-cyan-500 focus:outline-none"
+                  value={sellerId}
+                  onChange={(e) => setSellerId(e.target.value)}
+                  className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white"
                 />
               </div>
-
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Vendor Secret Token</label>
+                <input
+                  type="password"
+                  required
+                  value={vendorToken}
+                  onChange={(e) => setVendorToken(e.target.value)}
+                  className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Amount (USD)</label>
+                <input
+                  type="number"
+                  min="5"
+                  step="0.01"
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(Number(e.target.value))}
+                  className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  Available: ${stats.availableBalanceUSD.toFixed(2)} USD (sent to your D1 registered wallet)
+                </span>
+              </div>
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowPayoutModal(false)}
-                  className="rounded-lg px-3 py-1.5 text-slate-400 hover:text-white"
-                >
+                <button type="button" onClick={() => setShowPayoutModal(false)} className="px-3 py-1.5 text-slate-400">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-cyan-500 px-4 py-2 font-bold text-slate-950 hover:bg-cyan-400"
-                >
+                <button type="submit" className="rounded-lg bg-cyan-500 px-4 py-2 font-bold text-slate-950 hover:bg-cyan-400">
                   Confirm Payout
                 </button>
               </div>

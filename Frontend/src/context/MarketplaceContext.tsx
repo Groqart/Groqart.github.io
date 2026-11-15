@@ -1,4 +1,3 @@
-const API_BASE = import.meta.env.VITE_API_URL || '';
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Product, Order, UserRole, CryptoCurrency } from '../types/marketplace';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
@@ -7,15 +6,9 @@ import {
   saveLocalProducts,
   deleteLocalProduct,
   getLocalOrders,
-  addLocalOrder,
-  updateLocalOrderStatus,
 } from '../utils/localStore';
-import {
-  calculateCryptoAmount,
-  generateSandboxAddress,
-  formatCryptoPaymentURI,
-  SUPPORTED_CRYPTO,
-} from '../utils/oxapayLogic';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 interface MarketplaceContextType {
   products: Product[];
@@ -42,7 +35,6 @@ interface MarketplaceContextType {
 const MarketplaceContext = createContext<MarketplaceContextType | undefined>(undefined);
 
 export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // ВАЖНО: INITIAL_PRODUCTS сразу на старте гарантирует, что пререндер сгенерирует полные карточки для SEO/GEO!
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<Product[]>([]);
@@ -58,31 +50,45 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const fetchProducts = async () => {
     try {
-      const res = await fetch('/api/products');
+      const res = await fetch(`${API_BASE}/api/products`);
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
-        setProducts(data.products);
-        saveLocalProducts(data.products);
-        return;
+        // Когда в базе D1 появится хотя бы 1 реальный товар, переключаем витрину на базу D1
+        if (Array.isArray(data.products) && data.products.length > 0) {
+          setProducts(data.products);
+          saveLocalProducts(data.products);
+          return;
+        }
       }
     } catch {
-      // Игнорируем в offline/static
+      // Fallback к кэшу/демо
     }
     setProducts(getLocalProducts());
   };
 
   const fetchOrders = async () => {
+    const email =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('nexusbyte_buyer_email') || ''
+        : '';
+    if (!email) {
+      setOrders(getLocalOrders());
+      return;
+    }
+
     try {
-      const res = await fetch('/api/orders/my');
+      const res = await fetch(
+        `${API_BASE}/api/orders/my?email=${encodeURIComponent(email)}`
+      );
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
-        setOrders(data.orders);
+        setOrders(data.orders || []);
         return;
       }
     } catch {
-      // Игнорируем в offline/static
+      // Fallback
     }
     setOrders(getLocalOrders());
   };
@@ -105,42 +111,50 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const initiateBuy = async (product: Product) => {
-  const buyerEmail = window.prompt('Enter your email to receive the download & license key:', 'buyer@example.com');
-  if (!buyerEmail) return;
-  localStorage.setItem('nexusbyte_buyer_email', buyerEmail);
-
-  try {
-    const res = await fetch(`${API_BASE}/api/create-payment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        product_id: product.id,
-        buyer_email: buyerEmail,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.invoice_url) {
-      showToast(data.error || 'Failed to create NOWPayments invoice');
+  const initiateBuy = async (product: Product, _cryptoCurrency?: CryptoCurrency) => {
+    if (typeof window === 'undefined') return;
+    const savedEmail = localStorage.getItem('nexusbyte_buyer_email') || 'buyer@example.com';
+    const buyerEmail = window.prompt(
+      'Enter your email to receive the download link & license key:',
+      savedEmail
+    );
+    if (!buyerEmail || !buyerEmail.includes('@')) {
+      showToast('Valid email is required for digital delivery');
       return;
     }
-    // Перенаправляем на защищённую страницу оплаты NOWPayments
-    window.location.href = data.invoice_url;
-  } catch {
-    showToast('Network error contacting payment gateway');
-  }
-};
+    localStorage.setItem('nexusbyte_buyer_email', buyerEmail.trim().toLowerCase());
+
+    try {
+      const res = await fetch(`${API_BASE}/api/create-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          buyer_email: buyerEmail.trim().toLowerCase(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.invoice_url) {
+        showToast(data.error || 'Product not found in database or gateway error');
+        return;
+      }
+      setIsCartOpen(false);
+      window.location.href = data.invoice_url;
+    } catch {
+      showToast('Network error contacting payment gateway');
+    }
+  };
 
   const handlePaymentSuccess = (updatedOrder: Order) => {
-    updateLocalOrderStatus(updatedOrder.id, 'paid');
     fetchOrders();
     fetchProducts();
     showToast(`Order for "${updatedOrder.productTitle}" confirmed! Assets ready.`);
   };
 
   const addProduct = (newProd: Product) => {
-    setProducts((prev) => [newProd, ...prev]);
-    showToast(`Product "${newProd.title}" published!`);
+    setProducts((prev) => [newProd, ...prev.filter((p) => p.id !== newProd.id)]);
+    fetchProducts();
+    showToast(`Product "${newProd.title}" published to Backblaze B2 & D1!`);
   };
 
   const removeProduct = (id: string) => {

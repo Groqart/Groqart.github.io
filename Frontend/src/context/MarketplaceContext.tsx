@@ -1,4 +1,4 @@
-// Frontend/src/context/MarketplaceContext.tsx
+const API_BASE = import.meta.env.VITE_API_URL || '';
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Product, Order, UserRole, CryptoCurrency } from '../types/marketplace';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
@@ -105,76 +105,31 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const initiateBuy = async (product: Product, cryptoCurrency: CryptoCurrency = 'USDT') => {
-    try {
-      let createdOrder: Order | null = null;
-      try {
-        const res = await fetch('/api/oxapay/create-invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            productId: product.id,
-            buyerEmail: 'demo.buyer@nexusbyte.io',
-            buyerName: 'Demo Buyer',
-            cryptoCurrency,
-          }),
-        });
+  const initiateBuy = async (product: Product) => {
+  const buyerEmail = window.prompt('Enter your email to receive the download & license key:', 'buyer@example.com');
+  if (!buyerEmail) return;
+  localStorage.setItem('nexusbyte_buyer_email', buyerEmail);
 
-        const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          const data = await res.json();
-          createdOrder = data.order;
-        }
-      } catch (err) {
-        console.warn('API invoice offline, generating sandbox invoice', err);
-      }
-
-      if (!createdOrder) {
-        const cur = (cryptoCurrency.toUpperCase() in SUPPORTED_CRYPTO
-          ? cryptoCurrency.toUpperCase()
-          : 'USDT') as CryptoCurrency;
-        const trackId = `TRK_CF_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-        const cryptoAmount = calculateCryptoAmount(product.priceUSD, cur);
-        const depositAddress = generateSandboxAddress(cur);
-        const network = SUPPORTED_CRYPTO[cur]?.network || 'TRC20';
-        const expiresAt = Date.now() + 15 * 60 * 1000;
-        const qrCodeData = formatCryptoPaymentURI(cur, depositAddress, cryptoAmount);
-
-        createdOrder = {
-          id: `ord_local_${Date.now()}`,
-          buyerEmail: 'demo.buyer@nexusbyte.io',
-          buyerName: 'Demo Buyer',
-          productId: product.id,
-          productTitle: product.title,
-          productCategory: product.category,
-          productVersion: product.version,
-          deliveryType: product.deliveryType,
-          priceUSD: product.priceUSD,
-          status: 'pending',
-          oxaInvoice: {
-            trackId,
-            address: depositAddress,
-            cryptoCurrency: cur,
-            network,
-            cryptoAmount,
-            qrCodeData,
-            expiresAt,
-            payLink: `https://oxapay.com/pay/${trackId}`,
-            isSandbox: true,
-          },
-          createdAt: new Date().toISOString(),
-        };
-        addLocalOrder(createdOrder);
-        setOrders((prev) => [createdOrder!, ...prev]);
-      }
-
-      setActiveInvoiceOrder(createdOrder);
-      setIsCartOpen(false);
-    } catch (err) {
-      console.error('Buy error', err);
-      showToast('Checkout could not be initialized.');
+  try {
+    const res = await fetch(`${API_BASE}/api/create-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product_id: product.id,
+        buyer_email: buyerEmail,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.invoice_url) {
+      showToast(data.error || 'Failed to create NOWPayments invoice');
+      return;
     }
-  };
+    // Перенаправляем на защищённую страницу оплаты NOWPayments
+    window.location.href = data.invoice_url;
+  } catch {
+    showToast('Network error contacting payment gateway');
+  }
+};
 
   const handlePaymentSuccess = (updatedOrder: Order) => {
     updateLocalOrderStatus(updatedOrder.id, 'paid');

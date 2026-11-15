@@ -138,15 +138,6 @@ async function handleGetProducts(env, cors) {
 async function handleCreateProduct(request, env, cors) {
   const authToken = request.headers.get('x-marketplace-token');
   if (!env.MARKETPLACE_SECRET_TOKEN || authToken !== env.MARKETPLACE_SECRET_TOKEN) {
-    const content = `NexusByte - Vendor Secret Token\n\nВаш токен:\n${env.MARKETPLACE_SECRET_TOKEN}\n\nПроверьте, что он совпадает с MARKETPLACE_SECRET_TOKEN в настройках Cloudflare Worker.`;
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'nexusbyte-vendor-token.txt';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
     return jsonResponse({ error: 'Unauthorized: invalid vendor token' }, 401, cors);
   }
 

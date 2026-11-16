@@ -7,9 +7,9 @@
     <priority>1.0</priority>
   </url>
 
-  <!-- Шлюз и документация -->
+  <!-- Основные разделы -->
   <url>
-    <loc>https://nexusbyte.de5.net/gateway</loc>
+    <loc>https://nexusbyte.de5.net/vendor</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>

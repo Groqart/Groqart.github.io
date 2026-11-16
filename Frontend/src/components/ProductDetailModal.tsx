@@ -16,7 +16,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Product, CryptoCurrency } from '../types/marketplace';
-import { calculateCryptoAmount, SUPPORTED_CRYPTO } from '../utils/oxapayLogic';
+import { calculateCryptoAmount, SUPPORTED_CRYPTO } from '../utils/nowpaymentsLogic';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -244,10 +244,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 <div className="rounded-xl border border-cyan-900/40 bg-cyan-950/20 p-4">
                   <h4 className="font-bold text-cyan-300 text-sm mb-1 flex items-center gap-1.5">
                     <ShieldCheck className="h-4 w-4" />
-                    OxaPay Payment Escrow & Cryptographic Zero-Leak Delivery
+                    NOWPayments Escrow &amp; Cryptographic Zero-Leak Delivery
                   </h4>
                   <p className="leading-relaxed text-slate-300">
-                    Your digital files and license keys remain locked in an encrypted vault until the OxaPay gateway receives confirmed blockchain block inclusion. Upon payment webhook receipt, an HMAC-SHA256 signed, time-limited download token is generated.
+                    Your digital files and license keys remain locked in private Backblaze B2 storage until the NOWPayments gateway confirms blockchain settlement. Upon verified HMAC-SHA512 IPN webhook receipt, a signed 15-minute download link is unlocked.
                   </p>
                 </div>
 
@@ -330,10 +330,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/25 hover:from-cyan-400 hover:to-indigo-500 hover:shadow-cyan-500/40 transition active:scale-[0.99]"
               >
                 <Zap className="h-4 w-4 fill-white" />
-                Pay with OxaPay ({selectedCurrency})
+                Pay with NOWPayments ({selectedCurrency})
               </button>
               <p className="text-[10px] text-center text-slate-400 mt-2">
-                Protected by OxaPay Multi-Chain Webhook Engine
+                Protected by NOWPayments Multi-Chain IPN Engine
               </p>
             </div>
           </div>

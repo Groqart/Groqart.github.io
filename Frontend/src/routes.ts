@@ -6,5 +6,5 @@ export default [
   route("product/:id", "routes/product.tsx"),
   route("purchases", "routes/purchases.tsx"),
   route("vendor", "routes/vendor.tsx"),
-  route("gateway", "routes/gateway.tsx"),
+  route("auth/verify", "routes/auth-verify.tsx"),
 ] satisfies RouteConfig;

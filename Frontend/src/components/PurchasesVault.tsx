@@ -9,39 +9,25 @@ import {
   Archive,
   RefreshCw,
   ShoppingBag,
-  Mail,
-  Search,
 } from 'lucide-react';
-import { Order } from '../types/marketplace';
+import type { Order } from '../types/marketplace';
 
 interface PurchasesVaultProps {
   orders: Order[];
+  userEmail: string;
   onBrowseMarketplace: () => void;
   onRefreshOrders: () => void;
 }
 
 export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
   orders,
+  userEmail,
   onBrowseMarketplace,
   onRefreshOrders,
 }) => {
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [revealedKeyIds, setRevealedKeyIds] = useState<Record<string, boolean>>({});
-  const [buyerEmail, setBuyerEmail] = useState('');
-
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setBuyerEmail(localStorage.getItem('nexusbyte_buyer_email') || '');
-    }
-  }, []);
-
-  const handleApplyEmail = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (typeof window !== 'undefined' && buyerEmail.trim()) {
-      localStorage.setItem('nexusbyte_buyer_email', buyerEmail.trim().toLowerCase());
-      onRefreshOrders();
-    }
-  };
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
 
   const copyKey = (key: string, orderId: string) => {
     navigator.clipboard.writeText(key);
@@ -59,109 +45,67 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
   const paidOrders = orders.filter((o) => o.status === 'paid');
 
   const formatExpiresIn = (expiresAt?: number) => {
-    if (!expiresAt) return 'Active';
+    if (!expiresAt) return '15m signed link';
     const diffMs = expiresAt - Date.now();
-    if (diffMs <= 0) return 'Expired';
-    const hours = Math.floor(diffMs / (3600 * 1000));
-    const mins = Math.floor((diffMs % (3600 * 1000)) / (60 * 1000));
-    return `${hours}h ${mins}m remaining`;
+    if (diffMs <= 0) return 'Expired — click Refresh';
+    const mins = Math.floor(diffMs / (60 * 1000));
+    if (mins < 60) return `${mins}m remaining`;
+    const hours = Math.floor(mins / 60);
+    return `${hours}h ${mins % 60}m remaining`;
   };
 
-  const handleDownloadAsset = (order: Order) => {
+  const getDownloadHref = (order: Order): string | null => {
     if (order.secureDelivery?.downloadUrl) {
-      window.location.href = order.secureDelivery.downloadUrl;
-      return;
+      return order.secureDelivery.downloadUrl;
     }
-    alert('Download link expired. Click Refresh to generate a new 15-minute link from Backblaze B2.');
+    if (order.secureDelivery?.downloadToken) {
+      return `/api/downloads/${encodeURIComponent(order.secureDelivery.downloadToken)}`;
+    }
+    return null;
   };
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      {downloadNotice && (
+        <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 text-xs text-amber-300">
+          {downloadNotice}
+        </div>
+      )}
+
       {/* Title & Stats */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6 mb-8">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-black text-white tracking-tight sm:text-3xl">
               Digital Assets Library
-              <form onSubmit={handleApplyEmail} className="mb-6 flex gap-2 max-w-md text-xs">
-        <input
-          type="email"
-          value={buyerEmail}
-          onChange={(e) => setBuyerEmail(e.target.value)}
-          placeholder="Enter your purchase email to load assets..."
-          className="flex-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
-        />
-        <button
-          type="submit"
-          className="rounded-lg bg-slate-800 px-4 py-2 font-semibold text-cyan-300 hover:bg-slate-700"
-        >
-          Load Purchases
-        </button>
-      </form>
             </h1>
             <span className="rounded-full bg-cyan-950 px-2.5 py-0.5 text-xs font-semibold text-cyan-400 border border-cyan-800">
               {paidOrders.length} {paidOrders.length === 1 ? 'Product' : 'Products'}
             </span>
           </div>
           <p className="text-sm text-slate-400 mt-1">
-            Access your time-limited download packages, active tokens, and cryptographic software license keys.
+            Verified purchases for <span className="text-slate-200 font-medium">{userEmail}</span> • Time-limited signed downloads &amp; license keys.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={onRefreshOrders}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-300 hover:text-white transition"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-300 hover:text-white transition cursor-pointer"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Refresh
+            <span>Refresh Links</span>
           </button>
           <button
+            type="button"
             onClick={onBrowseMarketplace}
-            className="flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3.5 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 transition"
+            className="flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3.5 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 transition cursor-pointer"
           >
             <ShoppingBag className="h-3.5 w-3.5" />
-            Browse More
+            <span>Browse More</span>
           </button>
         </div>
-      </div>
-
-      {/* Email Recovery Form */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 mb-8">
-        <form
-          onSubmit={handleApplyEmail}
-          className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end"
-        >
-          <div className="flex-1">
-            <label
-              htmlFor="buyer-email"
-              className="text-xs font-semibold text-slate-300 flex items-center gap-1.5 mb-1.5"
-            >
-              <Mail className="h-3.5 w-3.5 text-cyan-400" />
-              Buyer email
-            </label>
-            <input
-              id="buyer-email"
-              type="email"
-              value={buyerEmail}
-              onChange={(e) => setBuyerEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
-              required
-            />
-            <p className="mt-1 text-[11px] text-slate-500">
-              Enter the email you used at checkout to restore your purchases on this device.
-            </p>
-          </div>
-          <button
-            type="submit"
-            className="flex items-center justify-center gap-1.5 rounded-lg bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 shadow hover:bg-cyan-400 transition"
-          >
-            <Search className="h-3.5 w-3.5" />
-            Find Purchases
-          </button>
-        </form>
       </div>
 
       {/* Orders List */}
@@ -170,17 +114,16 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800 text-slate-400 mb-4">
             <Archive className="h-7 w-7" />
           </div>
-          <h3 className="text-base font-bold text-white">
-            {buyerEmail ? 'No digital purchases found for this email' : 'Enter your buyer email to restore purchases'}
-          </h3>
+          <h2 className="text-base font-bold text-white">
+            No paid digital purchases yet for {userEmail}
+          </h2>
           <p className="text-xs text-slate-400 max-w-sm mt-1 mb-6">
-            {buyerEmail
-              ? 'Double-check the email or pick a script, SaaS template, bot or 3D asset from the marketplace and pay with NOWPayments crypto.'
-              : 'We use your checkout email to look up paid orders across devices. No account or password required.'}
+            Browse scripts, SaaS starters, automation bots, and 3D assets in the marketplace and settle instantly with NOWPayments crypto.
           </p>
           <button
+            type="button"
             onClick={onBrowseMarketplace}
-            className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition"
+            className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition cursor-pointer"
           >
             Explore Developer Products
           </button>
@@ -190,6 +133,7 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
           {paidOrders.map((order) => {
             const isRevealed = !!revealedKeyIds[order.id];
             const isCopied = copiedKeyId === order.id;
+            const downloadHref = getDownloadHref(order);
 
             return (
               <div
@@ -214,10 +158,10 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
 
                   <div className="flex sm:flex-col items-start sm:items-end justify-between text-xs text-slate-400">
                     <span className="font-mono text-emerald-400 font-semibold text-sm">
-                      ${order.priceUSD} USD (Paid via {order.oxaInvoice.cryptoCurrency})
+                      ${order.priceUSD} USD (Paid via {order.paymentMeta?.cryptoCurrency || 'NOWPayments'})
                     </span>
                     <span className="text-[11px]">
-                      {new Date(order.createdAt).toLocaleDateString()} • Track ID: {order.oxaInvoice.trackId}
+                      {new Date(order.createdAt).toLocaleDateString()} • Order: {order.id}
                     </span>
                   </div>
                 </div>
@@ -225,35 +169,49 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
                 {/* Secure Asset Delivery Box */}
                 <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* File Download section */}
-                  {order.secureDelivery?.downloadToken && (
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                            <Download className="h-4 w-4 text-cyan-400" />
-                            Digital Source Package
-                          </span>
-                          <span className="flex items-center gap-1 rounded bg-slate-900 px-2 py-0.5 text-[11px] font-mono text-cyan-300 border border-slate-800">
-                            <Clock className="h-3 w-3" />
-                            {formatExpiresIn(order.secureDelivery.downloadExpiresAt)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 mb-4">
-                          File: <span className="font-mono text-white">{order.secureDelivery.fileName}</span>
-                          <br />
-                          Usage: {order.secureDelivery.downloadCount} of {order.secureDelivery.maxDownloads} downloads used
-                        </p>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                          <Download className="h-4 w-4 text-cyan-400" />
+                          Digital Source Package
+                        </span>
+                        <span className="flex items-center gap-1 rounded bg-slate-900 px-2 py-0.5 text-[11px] font-mono text-cyan-300 border border-slate-800">
+                          <Clock className="h-3 w-3" />
+                          {formatExpiresIn(order.secureDelivery?.downloadExpiresAt)}
+                        </span>
                       </div>
+                      <p className="text-xs text-slate-400 mb-4">
+                        File:{' '}
+                        <span className="font-mono text-white">
+                          {order.secureDelivery?.fileName || 'package.zip'}
+                        </span>
+                      </p>
+                    </div>
 
-                      <button
-                        onClick={() => handleDownloadAsset(order)}
-                        className="flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow hover:bg-cyan-400 transition cursor-pointer"
+                    {downloadHref ? (
+                      <a
+                        href={downloadHref}
+                        download={order.secureDelivery?.fileName || 'package.zip'}
+                        className="flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow hover:bg-cyan-400 transition"
                       >
                         <Download className="h-4 w-4" />
-                        Download Asset ({order.secureDelivery.fileName})
+                        <span>Download Asset ({order.secureDelivery?.fileName || 'Archive'})</span>
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDownloadNotice('Refreshing signed download URL...');
+                          onRefreshOrders();
+                        }}
+                        className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-bold text-slate-200 hover:text-white transition cursor-pointer"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        <span>Regenerate Download Link</span>
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {/* License Key section */}
                   {order.secureDelivery?.licenseKey ? (
@@ -265,8 +223,9 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
                             License Key
                           </span>
                           <button
+                            type="button"
                             onClick={() => toggleReveal(order.id)}
-                            className="text-[11px] text-cyan-400 hover:underline"
+                            className="text-[11px] text-cyan-400 hover:underline cursor-pointer"
                           >
                             {isRevealed ? 'Hide Key' : 'Reveal Key'}
                           </button>
@@ -281,9 +240,10 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
                           {isRevealed ? order.secureDelivery.licenseKey : '••••-••••-••••-••••'}
                         </span>
                         <button
+                          type="button"
                           onClick={() => copyKey(order.secureDelivery?.licenseKey || '', order.id)}
-                          className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition"
-                          aria-label="Copy software license key"
+                          className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition cursor-pointer"
+                          aria-label={`Copy license key for ${order.productTitle}`}
                         >
                           {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                           <span>{isCopied ? 'Copied' : 'Copy'}</span>

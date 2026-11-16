@@ -28,7 +28,7 @@ export const ProductDetailPage: React.FC = () => {
   return (
     <ProductDetailModal
       product={product}
-      onClose={() => navigate(-1)}
+      onClose={() => navigate('/')}
       onBuy={(p, cur) => initiateBuy(p, cur)}
     />
   );

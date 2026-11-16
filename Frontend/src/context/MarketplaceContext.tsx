@@ -1,109 +1,179 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Product, Order, UserRole, CryptoCurrency } from '../types/marketplace';
-import { INITIAL_PRODUCTS } from '../data/initialProducts';
-import {
-  getLocalProducts,
-  saveLocalProducts,
-  deleteLocalProduct,
-  getLocalOrders,
-} from '../utils/localStore';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import type {
+  AuthUser,
+  CryptoCurrency,
+  Order,
+  Product,
+  SellerProfile,
+  UserRole,
+} from '../types/marketplace';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
+const AUTH_TOKEN_KEY = 'nexusbyte_auth_token';
+const BUYER_EMAIL_KEY = 'nexusbyte_buyer_email';
+
+export interface PendingCheckout {
+  product: Product;
+  cryptoCurrency: CryptoCurrency;
+}
 
 interface MarketplaceContextType {
   products: Product[];
+  isProductsLoading: boolean;
   orders: Order[];
   cart: Product[];
   isCartOpen: boolean;
   currentRole: UserRole;
-  activeInvoiceOrder: Order | null;
+  pendingCheckout: PendingCheckout | null;
   toastMessage: string | null;
+  authToken: string | null;
+  user: AuthUser | null;
+  seller: SellerProfile | null;
+  isAuthLoading: boolean;
   setIsCartOpen: (open: boolean) => void;
   setCurrentRole: (role: UserRole) => void;
-  setActiveInvoiceOrder: (order: Order | null) => void;
+  setPendingCheckout: (checkout: PendingCheckout | null) => void;
   showToast: (msg: string) => void;
   addToCart: (product: Product) => void;
   removeFromCart: (id: string) => void;
-  initiateBuy: (product: Product, cryptoCurrency?: CryptoCurrency) => Promise<void>;
-  handlePaymentSuccess: (order: Order) => void;
+  clearCart: () => void;
+  initiateBuy: (product: Product, cryptoCurrency?: CryptoCurrency) => void;
+  createPaymentCheckout: (buyerEmail: string) => Promise<{ ok: boolean; error?: string; invoiceUrl?: string }>;
+  requestMagicLink: (
+    email: string,
+    redirectPath?: string
+  ) => Promise<{ ok: boolean; error?: string; devVerifyUrl?: string }>;
+  verifyMagicToken: (token: string) => Promise<{ ok: boolean; error?: string }>;
+  completeVendorOnboarding: (
+    displayName: string,
+    walletAddress: string
+  ) => Promise<{ ok: boolean; error?: string }>;
+  logout: () => void;
   addProduct: (product: Product) => void;
   removeProduct: (id: string) => void;
   fetchOrders: () => Promise<void>;
   fetchProducts: () => Promise<void>;
+  refreshAuth: () => Promise<void>;
 }
 
 const MarketplaceContext = createContext<MarketplaceContextType | undefined>(undefined);
 
 export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<Product[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [currentRole, setCurrentRole] = useState<UserRole>('buyer');
-  const [activeInvoiceOrder, setActiveInvoiceOrder] = useState<Order | null>(null);
+  const [pendingCheckout, setPendingCheckout] = useState<PendingCheckout | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [seller, setSeller] = useState<SellerProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
-  };
+  }, []);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
+      setIsProductsLoading(true);
       const res = await fetch(`${API_BASE}/api/products`);
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
-        // Когда в базе D1 появится хотя бы 1 реальный товар, переключаем витрину на базу D1
-        if (Array.isArray(data.products) && data.products.length > 0) {
+        if (Array.isArray(data.products)) {
           setProducts(data.products);
-          saveLocalProducts(data.products);
-          return;
         }
       }
     } catch {
-      // Fallback к кэшу/демо
+      // keep existing state on transient network error
+    } finally {
+      setIsProductsLoading(false);
     }
-    setProducts(getLocalProducts());
-  };
+  }, []);
 
-  const fetchOrders = async () => {
-    const email =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('nexusbyte_buyer_email') || ''
-        : '';
-    if (!email) {
-      setOrders(getLocalOrders());
+  const fetchOrdersWithToken = useCallback(async (token: string | null) => {
+    if (!token) {
+      setOrders([]);
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/orders/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        setOrders([]);
+        return;
+      }
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        setOrders(Array.isArray(data.orders) ? data.orders : []);
+      }
+    } catch {
+      // ignore transient error
+    }
+  }, []);
+
+  const refreshAuth = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    const stored = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!stored) {
+      setAuthToken(null);
+      setUser(null);
+      setSeller(null);
+      setOrders([]);
+      setIsAuthLoading(false);
       return;
     }
 
     try {
-      const res = await fetch(
-        `${API_BASE}/api/orders/my?email=${encodeURIComponent(email)}`
-      );
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const data = await res.json();
-        setOrders(data.orders || []);
+      setIsAuthLoading(true);
+      const res = await fetch(`${API_BASE}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${stored}` },
+      });
+      if (!res.ok) {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        setAuthToken(null);
+        setUser(null);
+        setSeller(null);
+        setOrders([]);
         return;
       }
+      const data = await res.json();
+      setAuthToken(stored);
+      setUser(data.user || null);
+      setSeller(data.seller || null);
+      if (data.seller) {
+        setCurrentRole('vendor');
+      }
+      await fetchOrdersWithToken(stored);
     } catch {
-      // Fallback
+      // keep token if offline
+    } finally {
+      setIsAuthLoading(false);
     }
-    setOrders(getLocalOrders());
-  };
+  }, [fetchOrdersWithToken]);
 
   useEffect(() => {
     fetchProducts();
-    fetchOrders();
-  }, []);
+    refreshAuth();
+  }, [fetchProducts, refreshAuth]);
+
+  const fetchOrders = useCallback(async () => {
+    await fetchOrdersWithToken(authToken);
+  }, [authToken, fetchOrdersWithToken]);
 
   const addToCart = (product: Product) => {
     if (!cart.some((item) => item.id === product.id)) {
       setCart((prev) => [...prev, product]);
-      showToast(`Added "${product.title}" to cart`);
+      showToast(`Saved "${product.title}" for quick checkout`);
     } else {
-      showToast('Product already in your cart');
+      showToast('Product is already in your saved list');
     }
   };
 
@@ -111,54 +181,151 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const initiateBuy = async (product: Product, _cryptoCurrency?: CryptoCurrency) => {
+  const clearCart = () => {
+    setCart([]);
+  };
+
+  const initiateBuy = (product: Product, cryptoCurrency: CryptoCurrency = 'USDT') => {
     if (typeof window === 'undefined') return;
-    const savedEmail = localStorage.getItem('nexusbyte_buyer_email') || 'buyer@example.com';
-    const buyerEmail = window.prompt(
-      'Enter your email to receive the download link & license key:',
-      savedEmail
-    );
-    if (!buyerEmail || !buyerEmail.includes('@')) {
-      showToast('Valid email is required for digital delivery');
-      return;
+    setIsCartOpen(false);
+    setPendingCheckout({ product, cryptoCurrency });
+  };
+
+  const createPaymentCheckout = async (buyerEmailInput: string) => {
+    if (!pendingCheckout) {
+      return { ok: false, error: 'No product selected for checkout' };
     }
-    localStorage.setItem('nexusbyte_buyer_email', buyerEmail.trim().toLowerCase());
+    const email = buyerEmailInput.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      return { ok: false, error: 'Please enter a valid email address' };
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(BUYER_EMAIL_KEY, email);
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/create-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          product_id: product.id,
-          buyer_email: buyerEmail.trim().toLowerCase(),
+          product_id: pendingCheckout.product.id,
+          buyer_email: email,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.invoice_url) {
-        showToast(data.error || 'Product not found in database or gateway error');
-        return;
+        return {
+          ok: false,
+          error: data.error || 'Failed to initialize NOWPayments checkout',
+        };
       }
-      setIsCartOpen(false);
-      window.location.href = data.invoice_url;
+
+      setPendingCheckout(null);
+      return { ok: true, invoiceUrl: data.invoice_url };
     } catch {
-      showToast('Network error contacting payment gateway');
+      return { ok: false, error: 'Network error contacting payment gateway' };
     }
   };
 
-  const handlePaymentSuccess = (updatedOrder: Order) => {
-    fetchOrders();
-    fetchProducts();
-    showToast(`Order for "${updatedOrder.productTitle}" confirmed! Assets ready.`);
+  const requestMagicLink = async (emailInput: string, redirectPath = '/purchases') => {
+    const email = emailInput.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      return { ok: false, error: 'Valid email address is required' };
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/request-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, redirectPath }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { ok: false, error: data.error || 'Failed to send magic link' };
+      }
+      return { ok: true, devVerifyUrl: data.devVerifyUrl };
+    } catch {
+      return { ok: false, error: 'Network error sending magic link' };
+    }
+  };
+
+  const verifyMagicToken = async (token: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.token) {
+        return { ok: false, error: data.error || 'Invalid or expired magic link' };
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      }
+      setAuthToken(data.token);
+      setUser(data.user || null);
+      setSeller(data.seller || null);
+      if (data.seller) {
+        setCurrentRole('vendor');
+      }
+      await fetchOrdersWithToken(data.token);
+      showToast(`Signed in as ${data.user?.email || 'user'}`);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Network error verifying magic link' };
+    }
+  };
+
+  const completeVendorOnboarding = async (displayName: string, walletAddress: string) => {
+    if (!authToken) {
+      return { ok: false, error: 'Please sign in first' };
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/vendor/onboarding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          display_name: displayName.trim(),
+          wallet_address: walletAddress.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { ok: false, error: data.error || 'Vendor onboarding failed' };
+      }
+      setUser(data.user || user);
+      setSeller(data.seller || null);
+      setCurrentRole('vendor');
+      showToast('Vendor profile & payout wallet saved!');
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Network error saving vendor profile' };
+    }
+  };
+
+  const logout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+    setAuthToken(null);
+    setUser(null);
+    setSeller(null);
+    setOrders([]);
+    setCurrentRole('buyer');
+    showToast('Signed out');
   };
 
   const addProduct = (newProd: Product) => {
     setProducts((prev) => [newProd, ...prev.filter((p) => p.id !== newProd.id)]);
     fetchProducts();
-    showToast(`Product "${newProd.title}" published to Backblaze B2 & D1!`);
+    showToast(`Product "${newProd.title}" published!`);
   };
 
   const removeProduct = (id: string) => {
-    deleteLocalProduct(id);
     setProducts((prev) => prev.filter((p) => p.id !== id));
     showToast('Product removed from catalog');
   };
@@ -167,24 +334,35 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
     <MarketplaceContext.Provider
       value={{
         products,
+        isProductsLoading,
         orders,
         cart,
         isCartOpen,
         currentRole,
-        activeInvoiceOrder,
+        pendingCheckout,
         toastMessage,
+        authToken,
+        user,
+        seller,
+        isAuthLoading,
         setIsCartOpen,
         setCurrentRole,
-        setActiveInvoiceOrder,
+        setPendingCheckout,
         showToast,
         addToCart,
         removeFromCart,
+        clearCart,
         initiateBuy,
-        handlePaymentSuccess,
+        createPaymentCheckout,
+        requestMagicLink,
+        verifyMagicToken,
+        completeVendorOnboarding,
+        logout,
         addProduct,
         removeProduct,
         fetchOrders,
         fetchProducts,
+        refreshAuth,
       }}
     >
       {children}

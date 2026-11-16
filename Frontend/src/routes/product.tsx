@@ -63,7 +63,7 @@ export default function ProductRoute() {
       />
       <ProductDetailModal
         product={product}
-        onClose={() => navigate(-1)}
+        onClose={() => navigate('/')}
         onBuy={(p, cur) => initiateBuy(p, cur)}
       />
     </>

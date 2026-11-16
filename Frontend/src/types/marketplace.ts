@@ -1,13 +1,40 @@
 export type UserRole = 'buyer' | 'vendor' | 'admin';
 
-export interface User {
+export interface AuthUser {
   id: string;
-  name: string;
   email: string;
   role: UserRole;
-  avatar: string;
+  displayName: string;
+  createdAt: string;
+}
+
+export interface SellerProfile {
+  id: string;
+  displayName: string;
+  walletAddress: string;
   balanceUSD: number;
-  joinedDate: string;
+  createdAt: string;
+}
+
+export interface WithdrawalRecord {
+  id: string;
+  amountUSD: number;
+  walletAddress: string;
+  batchId: string | null;
+  status: 'pending' | 'processing' | 'completed';
+  createdAt: string;
+}
+
+export interface VendorStats {
+  sellerId: string;
+  displayName: string;
+  walletAddress: string;
+  totalProducts: number;
+  totalSalesCount: number;
+  totalRevenueUSD: number;
+  netEarningsUSD: number;
+  availableBalanceUSD: number;
+  recentWithdrawals: WithdrawalRecord[];
 }
 
 export type ProductCategory =
@@ -61,27 +88,11 @@ export interface Product {
     filename: string;
     code: string;
   };
-  downloadContentSample: string; // The text content packaged for the file download
+  downloadContentSample: string;
   createdAt: string;
 }
 
 export type CryptoCurrency = 'USDT' | 'BTC' | 'ETH' | 'LTC' | 'SOL';
-
-export interface NowPaymentsInvoice {
-  paymentId?: string;
-  trackId: string;
-  address: string;
-  cryptoCurrency: CryptoCurrency;
-  network: string;
-  cryptoAmount: number;
-  qrCodeData: string;
-  expiresAt: number; // timestamp
-  payLink?: string;
-  isSandbox: boolean;
-  invoiceUrl?: string;
-}
-
-export type OxaInvoice = NowPaymentsInvoice;
 
 export type OrderStatus = 'pending' | 'paid' | 'expired' | 'failed';
 
@@ -96,8 +107,10 @@ export interface Order {
   deliveryType: DeliveryType;
   priceUSD: number;
   status: OrderStatus;
-  oxaInvoice: NowPaymentsInvoice;
-  paymentInvoice?: NowPaymentsInvoice;
+  paymentMeta?: {
+    trackId: string;
+    cryptoCurrency: string;
+  };
   secureDelivery?: {
     downloadUrl?: string;
     downloadToken?: string;
@@ -110,22 +123,3 @@ export interface Order {
   createdAt: string;
   paidAt?: string;
 }
-
-export interface VendorPayout {
-  id: string;
-  vendorId: string;
-  amountUSD: number;
-  cryptoCurrency: CryptoCurrency;
-  address: string;
-  status: 'pending' | 'processing' | 'completed';
-  createdAt: string;
-}
-
-export interface NowPaymentsConfig {
-  apiKey: string;
-  ipnSecret: string;
-  sandboxMode: boolean;
-}
-
-export type OxaPayConfig = NowPaymentsConfig;
-

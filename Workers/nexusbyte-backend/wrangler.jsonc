@@ -17,4 +17,14 @@
     "B2_KEY_ID": "005ad09ec7d70a00000000001",
     "B2_REGION": "us-east-005"
   }
+  // Required Cloudflare Worker secrets (configure via `wrangler secret put <NAME>`):
+  // - NOWPAYMENTS_API_KEY
+  // - NOWPAYMENTS_IPN_SECRET
+  // - NOWPAYMENTS_EMAIL
+  // - NOWPAYMENTS_PASSWORD
+  // - NOWPAYMENTS_TOTP_SECRET
+  // - B2_APP_KEY
+  // - JWT_SECRET
+  // - RESEND_API_KEY
+  // - EMAIL_FROM (e.g. "NexusByte <noreply@nexusbyte.de5.net>")
 }

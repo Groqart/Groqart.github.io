@@ -1,0 +1,131 @@
+-- NexusByte Initial Catalog Seed Data
+-- Run with: wrangler d1 execute nexusbyte-db --remote --file=seed.sql
+
+INSERT OR IGNORE INTO users (id, email, role, display_name) VALUES
+  ('vendor_alex_dev', 'alex@vortexlabs.dev', 'vendor', 'Alex Rivers (Vortex Labs)'),
+  ('vendor_satoshi_forge', 'team@satoshiforge.io', 'vendor', 'SatoshiForge Systems'),
+  ('vendor_polygon_studio', 'arts@polygonarts.io', 'vendor', 'PolygonArts Interactive');
+
+INSERT OR IGNORE INTO sellers (id, display_name, wallet_address, balance_cents) VALUES
+  ('vendor_alex_dev', 'Alex Rivers (Vortex Labs)', '0x1111111111111111111111111111111111111111', 0),
+  ('vendor_satoshi_forge', 'SatoshiForge Systems', '0x2222222222222222222222222222222222222222', 0),
+  ('vendor_polygon_studio', 'PolygonArts Interactive', '0x3333333333333333333333333333333333333333', 0);
+
+INSERT OR IGNORE INTO products (
+  id, seller_id, title, slug, price_cents, b2_file_key, file_name, file_size,
+  category, tagline, description, version, delivery_type, tags_json, features_json, status, created_at
+) VALUES
+  (
+    'prod_hypersaas_next15',
+    'vendor_alex_dev',
+    'HyperSaaS - Next.js 15 Full-Stack AI Boilerplate',
+    'hypersaas-next15',
+    8900,
+    'seed/hypersaas-v2.4.1-source.zip',
+    'hypersaas-v2.4.1-source.zip',
+    '14.8 MB',
+    'SaaS Starters',
+    'Ship production-ready SaaS in 48 hours with Auth, NOWPayments & Stripe crypto billing',
+    'The modern developer boilerplate built on Next.js 15 App Router, React 19, Tailwind CSS v4, Prisma ORM, Server Actions, NOWPayments crypto checkout, and Stripe. Fully typed with TypeScript and production-grade security headers.',
+    'v2.4.1',
+    'both',
+    '["Next.js 15","TypeScript","Tailwind v4","NOWPayments","Prisma","AI SDK"]',
+    '["Next.js 15 App Router with Turbopack & React 19 Server Components","Plug-and-play NOWPayments Crypto & Stripe Dual Payment System","Role-based Access Control (RBAC) & Magic Link Authentication","AI Text & Image streaming pipeline ready out-of-the-box","Lifetime updates and private GitHub access included"]',
+    'published',
+    '2026-08-15T00:00:00Z'
+  ),
+  (
+    'prod_telebot_sniper',
+    'vendor_satoshi_forge',
+    'TeleBot Sniper - Telegram Crypto & DEX Trading Engine',
+    'telebot-sniper',
+    14900,
+    'seed/telebot-sniper-v3.2-py.tar.gz',
+    'telebot-sniper-v3.2-py.tar.gz',
+    '8.4 MB',
+    'Bots & Automation',
+    'High-frequency Telegram sniper bot in Python 3.12 with mempool monitoring',
+    'Ultra-fast asynchronous Telegram bot for monitoring liquidity pools, token snipes, limit orders, and automated take-profit / stop-loss tracking across Uniswap, Raydium, and PancakeSwap.',
+    'v3.2.0',
+    'both',
+    '["Python 3.12","Telegram API","WebSockets","Raydium","AsyncIO"]',
+    '["Sub-50ms mempool scanning with private RPC failover","Multi-wallet management with encrypted keystore","Interactive Telegram UI with custom inline keyboards & charts","Anti-MEV sandwich protection and simulated gas bumping","One-click Docker compose deployment included"]',
+    'published',
+    '2026-09-01T00:00:00Z'
+  ),
+  (
+    'prod_cybermech_3d',
+    'vendor_polygon_studio',
+    'CyberMech 2099 - Rigged & Animated 3D Sci-Fi Asset Pack',
+    'cybermech-2099',
+    4500,
+    'seed/cybermech-2099-fbx-blend.zip',
+    'cybermech-2099-fbx-blend.zip',
+    '412 MB',
+    '3D & Game Assets',
+    'Game-ready AAA mech robot with 35 mocap animations and 4K PBR textures',
+    'Modular sci-fi bipedal battle mech rigged for Unreal Engine 5, Unity, and Blender. Includes 4 distinct camouflage skins, modular weaponry (plasma cannon, railgun, shield), and 35 animations.',
+    'v1.5.0',
+    'file',
+    '["Unreal Engine 5","Blender","Unity","FBX","4K PBR","Mocap"]',
+    '["UE5 Control Rig and Unity Mecanim compatible skeleton","4K UDIM textures (BaseColor, Metallic, Roughness, Normal, Emissive)","3 LOD levels (LOD0: 48k tris, LOD1: 22k tris, LOD2: 8k tris)","Custom sounds FX for footsteps, firing, and hydraulic servos included"]',
+    'published',
+    '2026-07-22T00:00:00Z'
+  ),
+  (
+    'prod_rust_arbitrage',
+    'vendor_satoshi_forge',
+    'Fintech Quantum - Rust High-Frequency DEX/CEX Arbitrageur',
+    'fintech-quantum-rust',
+    29900,
+    'seed/quantum-arb-v4.0.2-rust.zip',
+    'quantum-arb-v4.0.2-rust.zip',
+    '5.2 MB',
+    'Scripts & Code',
+    'Sub-millisecond triangular & cross-exchange arbitrage pipeline in Rust',
+    'Engineered in Rust with Tokio and zero-allocation parsing. Connects via direct WebSocket feeds to Binance, Bybit, OKX, and Raydium. Includes mathematical profit simulation and slippage guard.',
+    'v4.0.2',
+    'both',
+    '["Rust","Tokio","HFT","Arbitrage","Zero-Allocation","WebSockets"]',
+    '["Microsecond execution times with lock-free ring buffers","Triangular cross-pair pathfinding algorithm with graph theory","Direct order book level 2 & level 3 delta reconstitution","Configurable risk parameters and emergency stop triggers"]',
+    'published',
+    '2026-06-10T00:00:00Z'
+  ),
+  (
+    'prod_aura_ui_system',
+    'vendor_alex_dev',
+    'Aura UI Pro - Enterprise Figma System & React 19 Components',
+    'aura-ui-pro',
+    6900,
+    'seed/aura-ui-pro-figma-react.zip',
+    'aura-ui-pro-figma-react.zip',
+    '78 MB',
+    'UI Kits & Design',
+    '1,400+ Figma components, tokens, and accessible React 19 Tailwind blocks',
+    'The comprehensive UI kit for enterprise applications, Web3 dashboards, and developer portals. Auto-layout 5.0, variables token system, dark/light modes, WCAG AAA accessibility, and direct React source code.',
+    'v3.1.0',
+    'file',
+    '["Figma","React 19","Tailwind CSS","Design Tokens","Accessibility"]',
+    '["1,400+ auto-layout components with interactive states","Semantic token system mapped 1:1 with Tailwind CSS v4 variables","45 full-page responsive dashboard templates included","Direct copy-paste React 19 + Framer Motion components"]',
+    'published',
+    '2026-05-18T00:00:00Z'
+  ),
+  (
+    'prod_omniscrape_cloud',
+    'vendor_satoshi_forge',
+    'OmniScrape Engine - Anti-Detect Scraping API & Headless Proxy',
+    'omniscrape-engine',
+    11900,
+    'seed/omniscrape-v2.1-go-binary.zip',
+    'omniscrape-v2.1-go-binary.zip',
+    '32.4 MB',
+    'APIs & Microservices',
+    'Distributed browser scraping microservice in Go with fingerprint spoofing',
+    'High-throughput web scraping daemon built in Go. Emulates genuine Chrome canvas fingerprints, WebGL shaders, audio contexts, and bypasses Cloudflare, Datadome, and Akamai challenges.',
+    'v2.1.0',
+    'both',
+    '["Go (Golang)","Playwright","Fingerprinting","Cloudflare Bypass","Microservice"]',
+    '["Dynamic WebGL & Canvas noise generation for zero fingerprint detection","Rotating proxy pool manager with latency-based routing","REST & gRPC endpoints with automatic retry backoff","Resource saving mode: blocks images/fonts automatically for 5x speed"]',
+    'published',
+    '2026-08-04T00:00:00Z'
+  );

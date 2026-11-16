@@ -1,27 +1,25 @@
-// Frontend/src/components/Layout.tsx
 import React from 'react';
-import { Outlet, Link, useNavigate } from 'react-router';
+import { Outlet, Link } from 'react-router';
 import { Cpu, CheckCircle } from 'lucide-react';
 import { Navbar } from './Navbar';
 import { CartDrawer } from './CartDrawer';
-import { OxaPayInvoiceModal } from './OxaPayInvoiceModal';
+import { CheckoutModal } from './CheckoutModal';
 import { useMarketplace } from '../context/MarketplaceContext';
 
 export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
-  const navigate = useNavigate();
   const {
     orders,
     cart,
     isCartOpen,
     currentRole,
-    activeInvoiceOrder,
     toastMessage,
+    user,
     setIsCartOpen,
     setCurrentRole,
-    setActiveInvoiceOrder,
     removeFromCart,
+    clearCart,
     initiateBuy,
-    handlePaymentSuccess,
+    logout,
   } = useMarketplace();
 
   const paidOrdersCount = orders.filter((o) => o.status === 'paid').length;
@@ -30,7 +28,11 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-slate-950 font-sans">
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-slate-900/95 px-4 py-3 text-xs font-semibold text-white shadow-2xl backdrop-blur-md">
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-slate-900/95 px-4 py-3 text-xs font-semibold text-white shadow-2xl backdrop-blur-md"
+        >
           <CheckCircle className="h-4 w-4 text-cyan-400" />
           <span>{toastMessage}</span>
         </div>
@@ -43,6 +45,8 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
         currentRole={currentRole}
         setCurrentRole={setCurrentRole}
         purchasesCount={paidOrdersCount}
+        user={user}
+        onLogout={logout}
       />
 
       {/* Route Content: render children or Outlet */}
@@ -50,25 +54,16 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
         {children || <Outlet />}
       </main>
 
-      {/* OxaPay / NOWPayments Modal */}
-      {activeInvoiceOrder && (
-        <OxaPayInvoiceModal
-          order={activeInvoiceOrder}
-          onClose={() => setActiveInvoiceOrder(null)}
-          onPaymentSuccess={handlePaymentSuccess}
-          onViewLibrary={() => {
-            setActiveInvoiceOrder(null);
-            navigate('/purchases');
-          }}
-        />
-      )}
+      {/* Checkout Modal */}
+      <CheckoutModal />
 
-      {/* Cart Drawer */}
+      {/* Saved Items / Quick Checkout Drawer */}
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         cart={cart}
         onRemoveItem={removeFromCart}
+        onClearCart={clearCart}
         onCheckoutProduct={(product) => initiateBuy(product, 'USDT')}
       />
 
@@ -78,18 +73,15 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
           <div className="flex items-center gap-2">
             <Cpu className="h-4 w-4 text-cyan-400" />
             <span className="font-semibold text-slate-300">NexusByte Marketplace</span>
-            <span>&copy; {new Date().getFullYear()} • Powered by React Router v8.5</span>
+            <span>&copy; {new Date().getFullYear()} • NOWPayments &amp; Cloudflare D1</span>
           </div>
 
           <div className="flex items-center gap-4 text-slate-400">
             <Link to="/" className="hover:text-white transition">
               Marketplace
             </Link>
-            <Link to="/gateway" className="hover:text-white transition">
-              Gateway Specs
-            </Link>
             <Link to="/vendor" className="hover:text-white transition">
-              Vendor Onboarding
+              Vendor Portal
             </Link>
             <Link to="/purchases" className="hover:text-white transition">
               My Library

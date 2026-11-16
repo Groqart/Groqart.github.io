@@ -18,7 +18,7 @@ const CATEGORIES: ProductCategory[] = [
 export const MarketplacePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { products, initiateBuy } = useMarketplace();
+  const { products, isProductsLoading, initiateBuy } = useMarketplace();
 
   const selectedCategory = (searchParams.get('category') as ProductCategory) || 'All';
   const searchQuery = searchParams.get('q') || '';
@@ -99,8 +99,8 @@ export const MarketplacePage: React.FC = () => {
               <span className="text-slate-400">USDT, BTC, ETH, LTC, SOL</span>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 backdrop-blur-sm">
-              <span className="text-lg font-bold text-emerald-400 block">24h Tokens</span>
-              <span className="text-slate-400">Signed Download Links</span>
+              <span className="text-lg font-bold text-emerald-400 block">15m Links</span>
+              <span className="text-slate-400">Presigned B2 Downloads</span>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 backdrop-blur-sm">
               <span className="text-lg font-bold text-purple-400 block">5% Fee</span>
@@ -154,6 +154,7 @@ export const MarketplacePage: React.FC = () => {
             <SlidersHorizontal className="h-4 w-4 text-slate-500" />
             <span>Sort:</span>
             <select
+              aria-label="Sort products"
               value={sortBy}
               onChange={(e) => updateParam('sort', e.target.value)}
               className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-white focus:border-cyan-500 focus:outline-none cursor-pointer"
@@ -168,7 +169,32 @@ export const MarketplacePage: React.FC = () => {
         </div>
 
         {/* Products Grid */}
-        {displayedProducts.length === 0 ? (
+        {isProductsLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map((n) => (
+              <div
+                key={n}
+                className="h-72 rounded-2xl border border-slate-800 bg-slate-900/50 animate-pulse"
+              />
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-12 text-center space-y-3">
+            <h2 className="text-base font-bold text-white">Catalog Is Empty</h2>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              No published products are in the D1 catalog yet. Seed sample items with <code className="text-cyan-300">seed.sql</code> or publish your first digital asset in the Vendor Portal.
+            </p>
+            <div>
+              <button
+                type="button"
+                onClick={() => navigate('/vendor')}
+                className="rounded-xl bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-400 transition cursor-pointer"
+              >
+                Open Vendor Portal
+              </button>
+            </div>
+          </div>
+        ) : displayedProducts.length === 0 ? (
           <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-12 text-center text-xs text-slate-400">
             No products found matching &ldquo;{searchQuery}&rdquo; in {selectedCategory}. Try adjusting your search query!
           </div>

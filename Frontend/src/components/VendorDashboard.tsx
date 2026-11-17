@@ -15,9 +15,14 @@ import {
   Store,
   CheckCircle2,
   AlertCircle,
+  Pencil,
+  Receipt,
+  RefreshCw,
+  BadgeCheck,
 } from 'lucide-react';
-import type { Product, VendorStats } from '../types/marketplace';
+import type { Product, ProductStatus, VendorStats } from '../types/marketplace';
 import { VendorUploadModal } from './VendorUploadModal';
+import { VendorEditProductModal } from './VendorEditProductModal';
 import { AuthMagicLinkCard } from './AuthMagicLinkCard';
 import { useMarketplace } from '../context/MarketplaceContext';
 
@@ -28,13 +33,23 @@ interface VendorDashboardProps {
   products: Product[];
   onProductDeleted: (id: string) => void;
   onProductCreated: (p: Product) => void;
+  onProductUpdated: () => void;
   onViewProduct: (p: Product) => void;
 }
+
+const PRODUCT_STATUS_BADGE: Record<ProductStatus, string> = {
+  published: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  pending_review: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  rejected: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  draft: 'bg-slate-800 text-slate-300 border-slate-700',
+  archived: 'bg-slate-800 text-slate-500 border-slate-700',
+};
 
 export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   products,
   onProductDeleted,
   onProductCreated,
+  onProductUpdated,
   onViewProduct,
 }) => {
   const {
@@ -47,22 +62,24 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   } = useMarketplace();
 
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<Product | null>(null);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [retryingWithdrawalId, setRetryingWithdrawalId] = useState<string | null>(null);
 
   const [payoutAmount, setPayoutAmount] = useState<number>(10);
   const [payoutStatus, setPayoutStatus] = useState<string | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // Onboarding & Payout Settings state
   const [displayName, setDisplayName] = useState('');
   const [walletAddress, setWalletAddress] = useState('');
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [isSavingSeller, setIsSavingSeller] = useState(false);
 
+  const [vendorInventory, setVendorInventory] = useState<Product[]>([]);
   const [stats, setStats] = useState<VendorStats>({
     sellerId: '',
     displayName: '',
@@ -72,6 +89,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     totalRevenueUSD: 0,
     netEarningsUSD: 0,
     availableBalanceUSD: 0,
+    recentOrders: [],
     recentWithdrawals: [],
   });
 
@@ -84,15 +102,26 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     }
   }, [seller, user]);
 
-  const fetchStats = useCallback(async () => {
+  const fetchVendorData = useCallback(async () => {
     if (!authToken || !seller) return;
     try {
-      const res = await fetch(`${API_BASE}/api/vendor/stats`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const [statsRes, prodsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/vendor/stats`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch(`${API_BASE}/api/vendor/products`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+      ]);
+      if (statsRes.ok) {
+        const data = await statsRes.json();
         setStats(data);
+      }
+      if (prodsRes.ok) {
+        const pData = await prodsRes.json();
+        if (Array.isArray(pData.products)) {
+          setVendorInventory(pData.products);
+        }
       }
     } catch {
       // ignore offline
@@ -100,8 +129,8 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   }, [authToken, seller]);
 
   useEffect(() => {
-    fetchStats();
-  }, [products, seller, fetchStats]);
+    fetchVendorData();
+  }, [products, seller, fetchVendorData]);
 
   const handleSaveSellerProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,7 +157,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     }
 
     setShowSettingsModal(false);
-    fetchStats();
+    fetchVendorData();
   };
 
   const handleRequestPayout = async (e: React.FormEvent) => {
@@ -154,15 +183,41 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
       const data = await res.json();
       if (!res.ok) {
         setPayoutStatus(data.error || 'Withdrawal failed');
+        fetchVendorData();
         return;
       }
       setShowPayoutModal(false);
       showToast(`USDC withdrawal submitted (Batch ${data.batchId})`);
-      fetchStats();
+      fetchVendorData();
     } catch {
       setPayoutStatus('Network error during payout request');
     } finally {
       setIsWithdrawing(false);
+    }
+  };
+
+  const handleRetryVerify = async (withdrawalId: string) => {
+    if (!authToken) return;
+    setRetryingWithdrawalId(withdrawalId);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/withdraw/${encodeURIComponent(withdrawalId)}/retry-verify`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${authToken}` },
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Retry verification failed');
+      } else {
+        showToast(`Withdrawal batch ${data.batchId} verified (${data.status})`);
+        fetchVendorData();
+      }
+    } catch {
+      showToast('Network error verifying withdrawal');
+    } finally {
+      setRetryingWithdrawalId(null);
     }
   };
 
@@ -182,8 +237,9 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
       }
       const deletedId = deleteTarget.id;
       setDeleteTarget(null);
+      setVendorInventory((prev) => prev.filter((p) => p.id !== deletedId));
       onProductDeleted(deletedId);
-      fetchStats();
+      fetchVendorData();
     } catch {
       setDeleteError('Network error deleting product');
     } finally {
@@ -291,7 +347,10 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     );
   }
 
-  const vendorProducts = products.filter((p) => p.vendorId === seller.id);
+  const vendorProducts =
+    vendorInventory.length > 0
+      ? vendorInventory
+      : products.filter((p) => p.vendorId === seller.id);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 space-y-8">
@@ -302,8 +361,9 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
             <h1 className="text-2xl font-black text-white tracking-tight sm:text-3xl">
               Vendor Studio
             </h1>
-            <span className="rounded-full bg-cyan-950 px-2.5 py-0.5 text-xs font-semibold text-cyan-400 border border-cyan-800">
+            <span className="inline-flex items-center gap-1 rounded-full bg-cyan-950 px-2.5 py-0.5 text-xs font-semibold text-cyan-400 border border-cyan-800">
               {seller.displayName}
+              {seller.isTrusted && <BadgeCheck className="h-3.5 w-3.5 text-cyan-300" />}
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
@@ -347,7 +407,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 tabular-nums">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
             <span>Gross Sales</span>
@@ -381,7 +441,9 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
             <Package className="h-4 w-4 text-purple-400" />
           </div>
           <div className="text-2xl font-extrabold text-white">{vendorProducts.length}</div>
-          <p className="text-[11px] text-slate-400 mt-1">Published in catalog</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {vendorProducts.filter((p) => (p.status || 'published') === 'published').length} published
+          </p>
         </div>
       </div>
 
@@ -407,46 +469,131 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs tabular-nums">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400">
                   <th className="pb-3 font-semibold">Product</th>
-                  <th className="pb-3 font-semibold">Category</th>
+                  <th className="pb-3 font-semibold">Status</th>
                   <th className="pb-3 font-semibold">Version</th>
+                  <th className="pb-3 font-semibold">Sales</th>
                   <th className="pb-3 font-semibold">Price</th>
                   <th className="pb-3 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {vendorProducts.map((prod) => (
-                  <tr key={prod.id} className="hover:bg-slate-800/30 transition">
-                    <td className="py-3.5 pr-3 font-medium text-white max-w-[260px]">
-                      <div className="truncate font-semibold">{prod.title}</div>
-                      <div className="text-[11px] text-slate-400 truncate">{prod.fileInfo.fileName}</div>
+                {vendorProducts.map((prod) => {
+                  const st = prod.status || 'published';
+                  return (
+                    <tr key={prod.id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-3.5 pr-3 font-medium text-white max-w-[260px]">
+                        <div className="truncate font-semibold">{prod.title}</div>
+                        <div className="text-[11px] text-slate-400 truncate">{prod.fileInfo.fileName}</div>
+                        {st === 'rejected' && prod.rejectionReason && (
+                          <div className="mt-1 text-[11px] text-rose-300">
+                            Reason: {prod.rejectionReason}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 pr-3">
+                        <span
+                          className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                            PRODUCT_STATUS_BADGE[st]
+                          }`}
+                        >
+                          {st.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="py-3.5 pr-3 font-mono text-cyan-400">{prod.version}</td>
+                      <td className="py-3.5 pr-3 text-slate-300">{prod.salesCount}</td>
+                      <td className="py-3.5 pr-3 font-bold text-white">${prod.priceUSD}</td>
+                      <td className="py-3.5 text-right whitespace-nowrap space-x-1">
+                        <button
+                          type="button"
+                          onClick={() => onViewProduct(prod)}
+                          aria-label={`View ${prod.title}`}
+                          className="rounded p-1.5 text-slate-400 hover:text-white transition cursor-pointer"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditTarget(prod)}
+                          aria-label={`Edit ${prod.title}`}
+                          className="rounded p-1.5 text-slate-400 hover:text-cyan-300 transition cursor-pointer"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setDeleteTarget(prod);
+                          }}
+                          aria-label={`Delete ${prod.title}`}
+                          className="rounded p-1.5 text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Recent Sales */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <Receipt className="h-4 w-4 text-emerald-400" />
+            <span>Recent Sales ({stats.recentOrders?.length || 0})</span>
+          </h2>
+        </div>
+
+        {!stats.recentOrders || stats.recentOrders.length === 0 ? (
+          <p className="text-xs text-slate-400">No customer orders recorded yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs tabular-nums">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400">
+                  <th className="pb-3 font-semibold">Date</th>
+                  <th className="pb-3 font-semibold">Product</th>
+                  <th className="pb-3 font-semibold">Buyer</th>
+                  <th className="pb-3 font-semibold">Gross</th>
+                  <th className="pb-3 font-semibold">Your Share (95%)</th>
+                  <th className="pb-3 font-semibold text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {stats.recentOrders.map((ord) => (
+                  <tr key={ord.id} className="hover:bg-slate-800/30 transition">
+                    <td className="py-3 pr-3 text-slate-400">
+                      {new Date(ord.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="py-3.5 pr-3 text-slate-300">{prod.category}</td>
-                    <td className="py-3.5 pr-3 font-mono text-cyan-400">{prod.version}</td>
-                    <td className="py-3.5 pr-3 font-bold text-white">${prod.priceUSD}</td>
-                    <td className="py-3.5 text-right space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => onViewProduct(prod)}
-                        aria-label={`View ${prod.title}`}
-                        className="rounded p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                    <td className="py-3 pr-3 font-medium text-white max-w-[200px] truncate">
+                      {ord.productTitle}
+                    </td>
+                    <td className="py-3 pr-3 font-mono text-slate-300">{ord.buyerEmailMasked}</td>
+                    <td className="py-3 pr-3 text-slate-300">${ord.totalUSD.toFixed(2)}</td>
+                    <td className="py-3 pr-3 font-bold text-emerald-400">
+                      +${ord.sellerShareUSD.toFixed(2)}
+                    </td>
+                    <td className="py-3 text-right">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                          ord.status === 'finished'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                            : ord.status === 'partially_paid'
+                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                        }`}
                       >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDeleteError(null);
-                          setDeleteTarget(prod);
-                        }}
-                        aria-label={`Delete ${prod.title}`}
-                        className="rounded p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                        {ord.status}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -469,7 +616,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           <p className="text-xs text-slate-400">No USDC withdrawals requested yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs tabular-nums">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400">
                   <th className="pb-3 font-semibold">Date</th>
@@ -491,9 +638,30 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                     </td>
                     <td className="py-3 pr-3 font-mono text-cyan-300">{w.batchId || '—'}</td>
                     <td className="py-3 text-right">
-                      <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300 border border-emerald-500/30">
-                        {w.status}
-                      </span>
+                      <div className="inline-flex items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                            w.status === 'pending_verification' || w.status === 'creating'
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                              : w.status === 'failed'
+                              ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                              : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          }`}
+                        >
+                          {w.status}
+                        </span>
+                        {w.status === 'pending_verification' && (
+                          <button
+                            type="button"
+                            onClick={() => handleRetryVerify(w.id)}
+                            disabled={retryingWithdrawalId === w.id}
+                            className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-950/40 px-2 py-0.5 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/20 transition cursor-pointer"
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            <span>Retry Verify</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -508,7 +676,18 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           onClose={() => setShowUploadModal(false)}
           onProductCreated={(p) => {
             onProductCreated(p);
-            fetchStats();
+            fetchVendorData();
+          }}
+        />
+      )}
+
+      {editTarget && (
+        <VendorEditProductModal
+          product={editTarget}
+          onClose={() => setEditTarget(null)}
+          onProductUpdated={() => {
+            onProductUpdated();
+            fetchVendorData();
           }}
         />
       )}
@@ -531,7 +710,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 type="button"
                 onClick={() => setShowPayoutModal(false)}
                 aria-label="Close withdraw dialog"
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -572,7 +751,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowPayoutModal(false)}
-                  className="px-3 py-1.5 text-slate-400 hover:text-white"
+                  className="px-3 py-1.5 text-slate-400 hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -607,7 +786,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 type="button"
                 onClick={() => setShowSettingsModal(false)}
                 aria-label="Close payout settings dialog"
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -653,7 +832,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowSettingsModal(false)}
-                  className="px-3 py-1.5 text-slate-400 hover:text-white"
+                  className="px-3 py-1.5 text-slate-400 hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -681,13 +860,13 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
               <h3 id="delete-modal-title" className="text-base font-bold text-white">
-                Delete Listing
+                Delete / Archive Listing
               </h3>
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
                 aria-label="Close delete dialog"
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -699,13 +878,13 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 </div>
               )}
               <p className="text-slate-300 leading-relaxed">
-                Are you sure you want to remove <strong className="text-white">{deleteTarget.title}</strong> from the catalog? Existing buyers will keep their past transactions.
+                Are you sure you want to remove <strong className="text-white">{deleteTarget.title}</strong> from the catalog? If buyers have already purchased this item, it will be archived safely so existing buyers keep access.
               </p>
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(null)}
-                  className="px-3 py-1.5 text-slate-400 hover:text-white"
+                  className="px-3 py-1.5 text-slate-400 hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -715,7 +894,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   disabled={isDeleting}
                   className="rounded-lg bg-rose-500 px-4 py-2 font-bold text-white hover:bg-rose-400 disabled:opacity-50 cursor-pointer"
                 >
-                  {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+                  {isDeleting ? 'Removing...' : 'Confirm Remove'}
                 </button>
               </div>
             </div>

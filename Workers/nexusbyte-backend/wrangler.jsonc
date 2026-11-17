@@ -27,4 +27,6 @@
   // - JWT_SECRET
   // - RESEND_API_KEY
   // - EMAIL_FROM (e.g. "NexusByte <noreply@nexusbyte.de5.net>")
+  // Optional secrets:
+  // - CF_TURNSTILE_SECRET (enables Cloudflare Turnstile verification on auth & checkout)
 }

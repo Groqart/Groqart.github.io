@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
-import { X, Upload, FileArchive } from 'lucide-react';
+import { X, Upload, FileArchive, ShieldAlert } from 'lucide-react';
 import type { ProductCategory, DeliveryType, LicenseType, Product } from '../types/marketplace';
 import { useMarketplace } from '../context/MarketplaceContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
+
+const BANNER_GRADIENTS = [
+  { label: 'Cyan / Indigo', value: 'from-cyan-600 via-blue-600 to-indigo-700' },
+  { label: 'Blue / Purple', value: 'from-blue-600 via-indigo-600 to-purple-700' },
+  { label: 'Emerald / Teal', value: 'from-emerald-600 via-teal-600 to-cyan-700' },
+  { label: 'Amber / Rose', value: 'from-amber-600 via-orange-600 to-rose-700' },
+  { label: 'Violet / Purple', value: 'from-violet-600 via-purple-600 to-indigo-800' },
+  { label: 'Fuchsia / Rose', value: 'from-fuchsia-600 via-pink-600 to-rose-600' },
+];
 
 interface VendorUploadModalProps {
   onClose: () => void;
@@ -14,7 +23,7 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
   onClose,
   onProductCreated,
 }) => {
-  const { authToken, seller } = useMarketplace();
+  const { authToken, seller, user } = useMarketplace();
   const [title, setTitle] = useState('');
   const [tagline, setTagline] = useState('');
   const [description, setDescription] = useState('');
@@ -23,12 +32,19 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('both');
   const [licenseType] = useState<LicenseType>('Commercial');
   const [version, setVersion] = useState('v1.0.0');
+  const [bannerGradient, setBannerGradient] = useState(BANNER_GRADIENTS[0].value);
   const [tagsInput, setTagsInput] = useState('');
   const [featuresInput, setFeaturesInput] = useState('');
+  const [changelogNote, setChangelogNote] = useState('Initial public release');
+  const [snippetLanguage, setSnippetLanguage] = useState('typescript');
+  const [snippetFilename, setSnippetFilename] = useState('');
+  const [snippetCode, setSnippetCode] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isAutoPublished = Boolean(seller?.isTrusted || user?.role === 'admin');
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -92,7 +108,7 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
       }
 
       // 3. Persist product metadata in D1
-      setUploadProgress('3/3 Saving product to Cloudflare D1...');
+      setUploadProgress('3/3 Verifying file & saving product...');
       const fileSizeStr = formatBytes(selectedFile.size);
       const createRes = await fetch(`${API_BASE}/api/products`, {
         method: 'POST',
@@ -107,21 +123,30 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
           priceUSD: Number(priceUSD),
           category,
           deliveryType,
-          version,
+          version: version.trim() || 'v1.0.0',
           b2_file_key: urlData.fileKey,
           fileName: selectedFile.name,
           fileSize: fileSizeStr,
+          bannerGradient,
           tags: parsedTags,
           features: parsedFeatures,
+          changelogNote: changelogNote.trim() || 'Initial release',
+          codeSnippet: snippetCode.trim()
+            ? {
+                language: snippetLanguage.trim() || 'typescript',
+                filename: snippetFilename.trim() || 'example.ts',
+                code: snippetCode,
+              }
+            : undefined,
         }),
       });
 
       const createData = await createRes.json();
       if (!createRes.ok || !createData.id) {
-        throw new Error(createData.error || 'Failed to save product to D1 database');
+        throw new Error(createData.error || 'Failed to save product to database');
       }
 
-      const createdProduct: Product = {
+      const createdProduct: Product = createData.product || {
         id: createData.id,
         slug: createData.id,
         title: title.trim(),
@@ -131,25 +156,33 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
         category,
         deliveryType,
         licenseType,
-        version,
+        version: version.trim() || 'v1.0.0',
+        status: createData.status || (isAutoPublished ? 'published' : 'pending_review'),
         fileInfo: {
           fileName: selectedFile.name,
-          fileSize: fileSizeStr,
+          fileSize: createData.fileSize || fileSizeStr,
           format: 'Archive',
         },
         vendorId: seller.id,
         vendorName: seller.displayName,
-        vendorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
-        rating: 5.0,
-        reviewsCount: 1,
+        vendorAvatar: '',
+        isTrustedVendor: Boolean(seller.isTrusted),
+        rating: 0,
+        reviewsCount: 0,
         salesCount: 0,
-        bannerGradient: 'from-cyan-600 via-blue-600 to-indigo-700',
+        bannerGradient,
         tags: parsedTags.length > 0 ? parsedTags : [category],
         features:
           parsedFeatures.length > 0
             ? parsedFeatures
             : ['Instant crypto checkout via NOWPayments', 'Protected Backblaze B2 delivery'],
-        changelog: [],
+        changelog: [
+          {
+            version: version.trim() || 'v1.0.0',
+            date: new Date().toISOString().slice(0, 10),
+            changes: [changelogNote.trim() || 'Initial release'],
+          },
+        ],
         downloadContentSample: '',
         createdAt: new Date().toISOString(),
       };
@@ -171,7 +204,7 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
       aria-labelledby="vendor-upload-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto"
     >
-      <div className="relative w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl my-8">
+      <div className="relative w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl my-8 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
@@ -190,13 +223,23 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close upload modal"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-xs">
+          {!isAutoPublished && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-950/25 p-3 text-amber-200">
+              <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <span>
+                New creator accounts start with manual trust review. Your upload will enter{' '}
+                <strong>pending_review</strong> until approved by an admin.
+              </span>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="rounded-lg border border-rose-500/40 bg-rose-950/50 p-3 text-rose-300">
               {errorMsg}
@@ -206,7 +249,7 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
           {/* File Selector */}
           <div>
             <label htmlFor="vendor-file-input" className="text-slate-300 font-semibold block mb-1">
-              Digital Product File *
+              Digital Product File * (max 500 MB)
             </label>
             <label
               htmlFor="vendor-file-input"
@@ -326,6 +369,24 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
             </div>
           </div>
 
+          {/* Banner Gradient Picker */}
+          <div>
+            <span className="text-slate-300 font-semibold block mb-1.5">Card Banner Theme</span>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {BANNER_GRADIENTS.map((bg) => (
+                <button
+                  key={bg.value}
+                  type="button"
+                  onClick={() => setBannerGradient(bg.value)}
+                  aria-label={`Banner theme ${bg.label}`}
+                  className={`h-8 rounded-lg bg-gradient-to-br ${bg.value} border-2 transition cursor-pointer ${
+                    bannerGradient === bg.value ? 'border-white scale-105' : 'border-transparent opacity-75 hover:opacity-100'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="upload-tags" className="text-slate-300 font-semibold block mb-1">
@@ -341,18 +402,32 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
               />
             </div>
             <div>
-              <label htmlFor="upload-features" className="text-slate-300 font-semibold block mb-1">
-                Key Features (one per line)
+              <label htmlFor="upload-changelog" className="text-slate-300 font-semibold block mb-1">
+                Initial Changelog Note
               </label>
-              <textarea
-                id="upload-features"
-                rows={2}
-                value={featuresInput}
-                onChange={(e) => setFeaturesInput(e.target.value)}
-                placeholder={'Zero-dependency Worker\nFull TypeScript source'}
+              <input
+                id="upload-changelog"
+                type="text"
+                value={changelogNote}
+                onChange={(e) => setChangelogNote(e.target.value)}
+                placeholder="Initial public release"
                 className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
               />
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="upload-features" className="text-slate-300 font-semibold block mb-1">
+              Key Features (one per line)
+            </label>
+            <textarea
+              id="upload-features"
+              rows={2}
+              value={featuresInput}
+              onChange={(e) => setFeaturesInput(e.target.value)}
+              placeholder={'Zero-dependency Worker\nFull TypeScript source'}
+              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
+            />
           </div>
 
           <div>
@@ -369,6 +444,41 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
             />
           </div>
 
+          {/* Optional Code Preview */}
+          <details className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <summary className="cursor-pointer font-semibold text-slate-300">
+              Optional: Code Snippet Preview (for Developer Products)
+            </summary>
+            <div className="mt-3 space-y-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
+                <input
+                  type="text"
+                  aria-label="Snippet language"
+                  value={snippetLanguage}
+                  onChange={(e) => setSnippetLanguage(e.target.value)}
+                  placeholder="typescript / python / rust"
+                  className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-white focus:border-cyan-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  aria-label="Snippet filename"
+                  value={snippetFilename}
+                  onChange={(e) => setSnippetFilename(e.target.value)}
+                  placeholder="src/client.ts"
+                  className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-white focus:border-cyan-500 focus:outline-none"
+                />
+              </div>
+              <textarea
+                rows={3}
+                aria-label="Snippet code"
+                value={snippetCode}
+                onChange={(e) => setSnippetCode(e.target.value)}
+                placeholder="Paste a short code sample shown on the product page..."
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 font-mono text-[11px] text-cyan-200 focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+          </details>
+
           {uploadProgress && (
             <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/30 p-3 text-cyan-300 font-mono">
               {uploadProgress}
@@ -379,7 +489,7 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-800 bg-slate-950 px-4 py-2 font-medium text-slate-400 hover:text-white"
+              className="rounded-lg border border-slate-800 bg-slate-950 px-4 py-2 font-medium text-slate-400 hover:text-white cursor-pointer"
             >
               Cancel
             </button>
@@ -388,7 +498,7 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
               disabled={isSubmitting}
               className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 font-bold text-white shadow-md shadow-cyan-500/25 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 cursor-pointer"
             >
-              {isSubmitting ? 'Uploading...' : 'Upload & Publish'}
+              {isSubmitting ? 'Uploading...' : isAutoPublished ? 'Upload & Publish' : 'Submit for Review'}
             </button>
           </div>
         </form>

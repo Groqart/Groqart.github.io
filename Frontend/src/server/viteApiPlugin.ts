@@ -4,16 +4,28 @@ import {
   createMarketplaceStore,
   createPaymentInStore,
   createProductInStore,
+  createReportInStore,
+  createReviewInStore,
   deleteProductInStore,
   findTransaction,
   formatAuthUser,
   formatSellerProfile,
+  getAdminOverviewFromStore,
+  getProductDetailFromStore,
+  getPublishedProductsFromStore,
+  getVendorProductsFromStore,
   getVendorStatsFromStore,
+  moderateProductInStore,
   onboardSellerInStore,
   requestMagicLinkInStore,
+  resolveReportInStore,
+  retryWithdrawVerifyInStore,
+  setSellerTrustInStore,
   settleTransaction,
   toClientOrder,
+  updateProductInStore,
   verifyJwt,
+  verifyLicenseKeyInStore,
   verifyMagicTokenInStore,
   withdrawFromStore,
 } from './marketplaceStore';
@@ -60,11 +72,31 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
   const pathname = parsedUrl.pathname;
   const method = (req.method || 'GET').toUpperCase();
 
-  if (!pathname.startsWith('/api/')) {
+  if (!pathname.startsWith('/api/') && pathname !== '/sitemap.xml') {
     return false;
   }
 
   try {
+    // 0. Dynamic Sitemap
+    if ((pathname === '/api/sitemap.xml' || pathname === '/sitemap.xml') && method === 'GET') {
+      const origin = `http://${req.headers.host || 'localhost:3000'}`;
+      const published = getPublishedProductsFromStore(store);
+      const urls = [
+        `<url><loc>${origin}/</loc><changefreq>daily</changefreq></url>`,
+        `<url><loc>${origin}/purchases</loc><changefreq>daily</changefreq></url>`,
+        `<url><loc>${origin}/vendor</loc><changefreq>daily</changefreq></url>`,
+        ...published.map(
+          (p) => `<url><loc>${origin}/product/${encodeURIComponent(p.id)}</loc><changefreq>weekly</changefreq></url>`
+        ),
+      ];
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.end(
+        `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>`
+      );
+      return true;
+    }
+
     // 1. Magic Link Request
     if (pathname === '/api/auth/request-link' && method === 'POST') {
       const body = await readJsonBody(req);
@@ -105,9 +137,17 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       return true;
     }
 
-    // 4. Products list
+    // 4. Products list (published only) & product detail
     if (pathname === '/api/products' && method === 'GET') {
-      sendJson(res, 200, { products: store.products });
+      sendJson(res, 200, { products: getPublishedProductsFromStore(store) });
+      return true;
+    }
+
+    if (pathname.startsWith('/api/products/') && method === 'GET') {
+      const id = decodeURIComponent(pathname.replace('/api/products/', ''));
+      const auth = authenticateRequest(req);
+      const detail = getProductDetailFromStore(store, id, auth);
+      sendJson(res, detail.status, detail.body);
       return true;
     }
 
@@ -132,7 +172,30 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       return true;
     }
 
-    // 6. Delete product (Seller JWT + ownership required)
+    // 5b. Update product / Release new version (Seller JWT + ownership required)
+    if (pathname.startsWith('/api/products/') && method === 'PATCH') {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      if (!auth.seller) {
+        sendJson(res, 403, { error: 'Forbidden: vendor access required' });
+        return true;
+      }
+      const id = decodeURIComponent(pathname.replace('/api/products/', ''));
+      const body = await readJsonBody(req);
+      const result = updateProductInStore(
+        store,
+        id,
+        auth.seller,
+        body as Parameters<typeof updateProductInStore>[3]
+      );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // 6. Delete / Soft-delete product (Seller JWT + ownership required)
     if (pathname.startsWith('/api/products/') && method === 'DELETE') {
       const auth = authenticateRequest(req);
       if (!auth) {
@@ -144,12 +207,12 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         return true;
       }
       const id = decodeURIComponent(pathname.replace('/api/products/', ''));
-      const deleted = deleteProductInStore(store, id, auth.seller.id);
-      if (!deleted) {
+      const result = deleteProductInStore(store, id, auth.seller.id);
+      if (!result.ok) {
         sendJson(res, 404, { error: 'Product not found or access denied' });
         return true;
       }
-      sendJson(res, 200, { success: true });
+      sendJson(res, 200, { success: true, archived: result.archived, deleted: result.deleted });
       return true;
     }
 
@@ -197,22 +260,23 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       return true;
     }
 
-    // 9. Sandbox confirmation helper (Dev only: simulates NOWPayments IPN completion)
+    // 9. Sandbox confirmation helper (Dev only: simulates NOWPayments IPN statuses)
     if (pathname === '/api/sandbox/confirm-order' && method === 'POST') {
       const body = await readJsonBody(req);
       const orderId = String(body.order_id || '');
       const accessToken = String(body.token || '');
+      const nextStatus = String(body.status || 'finished') as Parameters<typeof settleTransaction>[2];
       const tx = findTransaction(store, orderId);
       if (!tx || tx.accessToken !== accessToken) {
         sendJson(res, 403, { error: 'Invalid order or access token' });
         return true;
       }
-      const settled = settleTransaction(store, orderId, 'finished');
+      const settled = settleTransaction(store, orderId, nextStatus);
       sendJson(res, settled.status, settled.body);
       return true;
     }
 
-    // 10. Order status (Requires guest access_token OR Buyer JWT matching buyer_email)
+    // 10. Order status
     if (pathname === '/api/order-status' && method === 'GET') {
       const orderId = parsedUrl.searchParams.get('order_id') || '';
       const accessToken = parsedUrl.searchParams.get('token') || '';
@@ -239,18 +303,25 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         sendJson(res, 200, {
           status: 'finished',
           order_id: tx.orderId,
+          pay_currency: tx.payCurrency || null,
+          product_id: tx.productId,
           product_title: product?.title || 'Digital Asset',
           file_name: product?.fileInfo.fileName || 'archive.zip',
-          license_key: tx.licenseKey,
+          delivery_type: product?.deliveryType || 'both',
+          license_key: tx.licenseKey || null,
           download_url: tx.downloadToken ? `/api/downloads/${tx.downloadToken}` : null,
         });
         return true;
       }
-      sendJson(res, 200, { status: tx.status, order_id: tx.orderId });
+      sendJson(res, 200, {
+        status: tx.status,
+        order_id: tx.orderId,
+        pay_currency: tx.payCurrency || null,
+      });
       return true;
     }
 
-    // 11. Authenticated Buyer Orders (JWT required, email strictly from JWT)
+    // 11. Authenticated Buyer Orders
     if (pathname === '/api/orders/my' && method === 'GET') {
       const auth = authenticateRequest(req);
       if (!auth) {
@@ -261,7 +332,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       for (const tx of store.transactions.values()) {
         if (tx.buyerEmail === auth.user.email.toLowerCase() && tx.status === 'finished') {
           const product = store.products.find((p) => p.id === tx.productId);
-          orders.push(toClientOrder(tx, product));
+          orders.push(toClientOrder(store, tx, product));
         }
       }
       orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -279,14 +350,56 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       }
       const product = store.products.find((p) => p.id === tx.productId);
       const fileName = product?.fileInfo.fileName || 'nexusbyte-package.txt';
+      const uploaded = product?.b2FileKey ? store.uploadedFiles.get(product.b2FileKey) : undefined;
       const content =
+        uploaded?.content ||
         product?.downloadContentSample ||
-        `NexusByte Verified Digital Delivery\nOrder: ${tx.orderId}\nLicense Key: ${tx.licenseKey || 'N/A'}\n`;
+        `NexusByte Verified Digital Delivery\nOrder: ${tx.orderId}\nVersion: ${product?.version || 'v1.0.0'}\nLicense Key: ${tx.licenseKey || 'N/A'}\n`;
 
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.end(content);
+      return true;
+    }
+
+    // 12b. Trust Layer: Verify License Key
+    if (pathname === '/api/licenses/verify' && method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = verifyLicenseKeyInStore(
+        store,
+        body as Parameters<typeof verifyLicenseKeyInStore>[1]
+      );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // 12c. Trust Layer: Create Review (JWT required)
+    if (pathname === '/api/reviews' && method === 'POST') {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized: sign in to leave a verified review' });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const result = createReviewInStore(
+        store,
+        auth.user.email,
+        body as Parameters<typeof createReviewInStore>[2]
+      );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // 12d. Trust Layer: Report Product
+    if (pathname === '/api/reports' && method === 'POST') {
+      const auth = authenticateRequest(req);
+      const body = await readJsonBody(req);
+      const result = createReportInStore(store, {
+        ...(body as Parameters<typeof createReportInStore>[1]),
+        reporter_email: auth ? auth.user.email : String(body.reporter_email || ''),
+      });
+      sendJson(res, result.status, result.body);
       return true;
     }
 
@@ -308,6 +421,21 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       return true;
     }
 
+    // 13b. Vendor products (including pending_review / rejected / draft)
+    if (pathname === '/api/vendor/products' && method === 'GET') {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      if (!auth.seller) {
+        sendJson(res, 403, { error: 'Complete vendor onboarding first' });
+        return true;
+      }
+      sendJson(res, 200, { products: getVendorProductsFromStore(store, auth.seller.id) });
+      return true;
+    }
+
     // 14. Vendor stats (JWT + Seller required)
     if (pathname === '/api/vendor/stats' && method === 'GET') {
       const auth = authenticateRequest(req);
@@ -323,7 +451,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       return true;
     }
 
-    // 15. Withdraw (JWT + Seller required)
+    // 15. Withdraw & Retry Verify
     if (pathname === '/api/withdraw' && method === 'POST') {
       const auth = authenticateRequest(req);
       if (!auth) {
@@ -344,6 +472,116 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       return true;
     }
 
+    if (
+      pathname.startsWith('/api/withdraw/') &&
+      pathname.endsWith('/retry-verify') &&
+      method === 'POST'
+    ) {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      const id = decodeURIComponent(
+        pathname.slice('/api/withdraw/'.length, -'/retry-verify'.length)
+      );
+      const result = retryWithdrawVerifyInStore(store, id, {
+        sellerId: auth.seller?.id,
+        isAdmin: auth.user.role === 'admin',
+      });
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // 16. Admin Moderation Endpoints
+    if (pathname === '/api/admin/overview' && method === 'GET') {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      if (auth.user.role !== 'admin') {
+        sendJson(res, 403, { error: 'Forbidden: admin access required' });
+        return true;
+      }
+      sendJson(res, 200, getAdminOverviewFromStore(store));
+      return true;
+    }
+
+    if (
+      pathname.startsWith('/api/admin/products/') &&
+      pathname.endsWith('/moderate') &&
+      method === 'POST'
+    ) {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      if (auth.user.role !== 'admin') {
+        sendJson(res, 403, { error: 'Forbidden: admin access required' });
+        return true;
+      }
+      const id = decodeURIComponent(
+        pathname.slice('/api/admin/products/'.length, -'/moderate'.length)
+      );
+      const body = await readJsonBody(req);
+      const result = moderateProductInStore(
+        store,
+        id,
+        String(body.action || ''),
+        typeof body.reason === 'string' ? body.reason : undefined
+      );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    if (
+      pathname.startsWith('/api/admin/sellers/') &&
+      pathname.endsWith('/trust') &&
+      method === 'POST'
+    ) {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      if (auth.user.role !== 'admin') {
+        sendJson(res, 403, { error: 'Forbidden: admin access required' });
+        return true;
+      }
+      const id = decodeURIComponent(
+        pathname.slice('/api/admin/sellers/'.length, -'/trust'.length)
+      );
+      const body = await readJsonBody(req);
+      const result = setSellerTrustInStore(store, id, Boolean(body.is_trusted));
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    if (
+      pathname.startsWith('/api/admin/reports/') &&
+      pathname.endsWith('/resolve') &&
+      method === 'POST'
+    ) {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      if (auth.user.role !== 'admin') {
+        sendJson(res, 403, { error: 'Forbidden: admin access required' });
+        return true;
+      }
+      const id = decodeURIComponent(
+        pathname.slice('/api/admin/reports/'.length, -'/resolve'.length)
+      );
+      const body = await readJsonBody(req);
+      const result = resolveReportInStore(store, id, String(body.status || ''));
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
     sendJson(res, 404, { error: 'Endpoint Not Found' });
     return true;
   } catch (err) {
@@ -358,7 +596,7 @@ export function nexusbyteApiPlugin(): Plugin {
     name: 'nexusbyte-api-middleware',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        if (!req.url?.startsWith('/api/')) {
+        if (!req.url?.startsWith('/api/') && req.url !== '/sitemap.xml') {
           next();
           return;
         }

@@ -38,7 +38,7 @@ npm run build
 
 ## Cloudflare D1 & Worker Deployment
 
-1. Initialize and seed the D1 database (`Workers/nexusbyte-backend`):
+1. **Fresh D1 installation** (`Workers/nexusbyte-backend`):
 
 ```bash
 cd Workers/nexusbyte-backend
@@ -46,7 +46,16 @@ npx wrangler d1 execute nexusbyte-db --remote --file=schema.sql
 npx wrangler d1 execute nexusbyte-db --remote --file=seed.sql
 ```
 
-2. Configure Worker secrets:
+2. **Upgrading an existing D1 database**:
+
+```bash
+cd Workers/nexusbyte-backend
+npx wrangler d1 execute nexusbyte-db --remote --file=migrations/0002_commerce_trust.sql
+```
+
+> **Note on Seed Files in Backblaze B2**: `seed.sql` inserts sample product rows referencing `seed/<filename>` keys. In production, upload corresponding sample archives to your private Backblaze B2 bucket under `seed/` (or publish real vendor assets through `/vendor`) so buyers can download those files immediately.
+
+3. **Configure Worker secrets**:
 
 ```bash
 npx wrangler secret put JWT_SECRET
@@ -58,10 +67,29 @@ npx wrangler secret put NOWPAYMENTS_EMAIL
 npx wrangler secret put NOWPAYMENTS_PASSWORD
 npx wrangler secret put NOWPAYMENTS_TOTP_SECRET
 npx wrangler secret put B2_APP_KEY
+# Optional: enable Cloudflare Turnstile bot protection on magic links & checkout
+npx wrangler secret put CF_TURNSTILE_SECRET
 ```
 
-3. Deploy the Worker and build the Frontend (`VITE_API_URL` set in `Frontend/.env`):
+4. **Promote your first Platform Admin**:
+
+Sign in once via Magic Link, then promote your user in D1 (in the local Vite sandbox, `admin@nexusbyte.io` is pre-seeded with `role = 'admin'`):
+
+```bash
+npx wrangler d1 execute nexusbyte-db --remote --command "UPDATE users SET role = 'admin' WHERE email = 'you@yourdomain.com';"
+```
+
+5. **Deploy the Worker and build the Frontend** (`VITE_API_URL` set in `Frontend/.env`):
 
 ```bash
 npx wrangler deploy
 ```
+
+### Trust & Commerce APIs
+
+- `POST /api/licenses/verify` — Public license verification endpoint (`{ product_id, license_key, increment_activation }`)
+- `POST /api/reviews` — Verified buyer review creation (JWT + completed order required)
+- `PATCH /api/products/:id` — Vendor metadata updates, new version releases, and changelog entries
+- `GET /api/sitemap.xml` — Dynamic XML sitemap of all published products
+- `GET /api/admin/overview`, `POST /api/admin/products/:id/moderate`, `POST /api/admin/sellers/:id/trust`, `POST /api/admin/reports/:id/resolve` — Admin moderation & safety APIs
+

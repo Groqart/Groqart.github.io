@@ -7,6 +7,7 @@ import type {
   SellerProfile,
   UserRole,
 } from '../types/marketplace';
+import { getPayCurrencyTicker } from '../utils/nowpaymentsLogic';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const AUTH_TOKEN_KEY = 'nexusbyte_auth_token';
@@ -38,7 +39,10 @@ interface MarketplaceContextType {
   removeFromCart: (id: string) => void;
   clearCart: () => void;
   initiateBuy: (product: Product, cryptoCurrency?: CryptoCurrency) => void;
-  createPaymentCheckout: (buyerEmail: string) => Promise<{ ok: boolean; error?: string; invoiceUrl?: string }>;
+  createPaymentCheckout: (
+    buyerEmail: string,
+    overrideCurrency?: CryptoCurrency
+  ) => Promise<{ ok: boolean; error?: string; invoiceUrl?: string }>;
   requestMagicLink: (
     email: string,
     redirectPath?: string
@@ -148,7 +152,9 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
       setAuthToken(stored);
       setUser(data.user || null);
       setSeller(data.seller || null);
-      if (data.seller) {
+      if (data.user?.role === 'admin') {
+        setCurrentRole('admin');
+      } else if (data.seller) {
         setCurrentRole('vendor');
       }
       await fetchOrdersWithToken(stored);
@@ -191,7 +197,10 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
     setPendingCheckout({ product, cryptoCurrency });
   };
 
-  const createPaymentCheckout = async (buyerEmailInput: string) => {
+  const createPaymentCheckout = async (
+    buyerEmailInput: string,
+    overrideCurrency?: CryptoCurrency
+  ) => {
     if (!pendingCheckout) {
       return { ok: false, error: 'No product selected for checkout' };
     }
@@ -204,6 +213,9 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
       localStorage.setItem(BUYER_EMAIL_KEY, email);
     }
 
+    const chosenCurrency = overrideCurrency || pendingCheckout.cryptoCurrency;
+    const payCurrency = getPayCurrencyTicker(chosenCurrency);
+
     try {
       const res = await fetch(`${API_BASE}/api/create-payment`, {
         method: 'POST',
@@ -211,6 +223,7 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
         body: JSON.stringify({
           product_id: pendingCheckout.product.id,
           buyer_email: email,
+          pay_currency: payCurrency,
         }),
       });
       const data = await res.json();
@@ -266,7 +279,9 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
       setAuthToken(data.token);
       setUser(data.user || null);
       setSeller(data.seller || null);
-      if (data.seller) {
+      if (data.user?.role === 'admin') {
+        setCurrentRole('admin');
+      } else if (data.seller) {
         setCurrentRole('vendor');
       }
       await fetchOrdersWithToken(data.token);
@@ -320,14 +335,18 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   const addProduct = (newProd: Product) => {
-    setProducts((prev) => [newProd, ...prev.filter((p) => p.id !== newProd.id)]);
+    if (newProd.status === 'published' || !newProd.status) {
+      setProducts((prev) => [newProd, ...prev.filter((p) => p.id !== newProd.id)]);
+      showToast(`Product "${newProd.title}" published!`);
+    } else {
+      showToast(`Product "${newProd.title}" submitted for moderation review`);
+    }
     fetchProducts();
-    showToast(`Product "${newProd.title}" published!`);
   };
 
   const removeProduct = (id: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== id));
-    showToast('Product removed from catalog');
+    showToast('Product removed from active catalog');
   };
 
   return (

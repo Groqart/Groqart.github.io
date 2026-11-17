@@ -13,27 +13,50 @@ export interface SellerProfile {
   displayName: string;
   walletAddress: string;
   balanceUSD: number;
+  isTrusted?: boolean;
   createdAt: string;
 }
+
+export type WithdrawalStatus =
+  | 'creating'
+  | 'pending_verification'
+  | 'processing'
+  | 'completed'
+  | 'failed';
 
 export interface WithdrawalRecord {
   id: string;
   amountUSD: number;
   walletAddress: string;
   batchId: string | null;
-  status: 'pending' | 'processing' | 'completed';
+  status: WithdrawalStatus;
   createdAt: string;
+}
+
+export interface VendorRecentOrder {
+  id: string;
+  productId: string;
+  productTitle: string;
+  totalUSD: number;
+  sellerShareUSD: number;
+  status: string;
+  payCurrency?: string | null;
+  buyerEmailMasked: string;
+  createdAt: string;
+  paidAt?: string | null;
 }
 
 export interface VendorStats {
   sellerId: string;
   displayName: string;
   walletAddress: string;
+  isTrusted?: boolean;
   totalProducts: number;
   totalSalesCount: number;
   totalRevenueUSD: number;
   netEarningsUSD: number;
   availableBalanceUSD: number;
+  recentOrders: VendorRecentOrder[];
   recentWithdrawals: WithdrawalRecord[];
 }
 
@@ -49,6 +72,8 @@ export type ProductCategory =
 export type DeliveryType = 'file' | 'license_key' | 'both';
 
 export type LicenseType = 'Commercial' | 'Personal' | 'Extended Multi-Client';
+
+export type ProductStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'archived';
 
 export interface ProductChangelog {
   version: string;
@@ -67,6 +92,9 @@ export interface Product {
   deliveryType: DeliveryType;
   licenseType: LicenseType;
   version: string;
+  status?: ProductStatus;
+  rejectionReason?: string;
+  b2FileKey?: string;
   fileInfo: {
     fileName: string;
     fileSize: string;
@@ -76,10 +104,12 @@ export interface Product {
   vendorId: string;
   vendorName: string;
   vendorAvatar: string;
+  isTrustedVendor?: boolean;
   rating: number;
   reviewsCount: number;
   salesCount: number;
   bannerGradient: string;
+  previewImages?: string[];
   tags: string[];
   features: string[];
   changelog: ProductChangelog[];
@@ -92,9 +122,81 @@ export interface Product {
   createdAt: string;
 }
 
+export interface ReviewRecord {
+  id: string;
+  productId: string;
+  reviewerName: string;
+  rating: number;
+  comment: string;
+  verifiedPurchase: boolean;
+  createdAt: string;
+}
+
+export interface ReportRecord {
+  id: string;
+  productId: string;
+  productTitle: string;
+  reporterEmailMasked: string;
+  reason: string;
+  details: string;
+  status: 'open' | 'resolved' | 'dismissed';
+  createdAt: string;
+}
+
+export interface AdminOverviewData {
+  stats: {
+    totalUsers: number;
+    totalSellers: number;
+    totalProducts: number;
+    pendingReviewCount: number;
+    finishedOrders: number;
+    platformRevenueUSD: number;
+    openReportsCount: number;
+  };
+  moderationQueue: Product[];
+  sellers: Array<{
+    id: string;
+    email: string;
+    displayName: string;
+    walletAddress: string;
+    balanceUSD: number;
+    isTrusted: boolean;
+    productCount: number;
+    createdAt: string;
+  }>;
+  orders: Array<{
+    id: string;
+    productId: string;
+    productTitle: string;
+    buyerEmailMasked: string;
+    totalUSD: number;
+    status: string;
+    payCurrency?: string | null;
+    createdAt: string;
+  }>;
+  pendingWithdrawals: Array<{
+    id: string;
+    sellerId: string;
+    sellerName: string;
+    amountUSD: number;
+    walletAddress: string;
+    batchId: string | null;
+    status: string;
+    createdAt: string;
+  }>;
+  reports: ReportRecord[];
+}
+
 export type CryptoCurrency = 'USDT' | 'BTC' | 'ETH' | 'LTC' | 'SOL';
 
-export type OrderStatus = 'pending' | 'paid' | 'expired' | 'failed';
+export type OrderStatus =
+  | 'pending'
+  | 'confirming'
+  | 'sending'
+  | 'partially_paid'
+  | 'paid'
+  | 'expired'
+  | 'failed';
 
 export interface Order {
   id: string;
@@ -107,6 +209,8 @@ export interface Order {
   deliveryType: DeliveryType;
   priceUSD: number;
   status: OrderStatus;
+  hasReviewed?: boolean;
+  reviewRating?: number;
   paymentMeta?: {
     trackId: string;
     cryptoCurrency: string;

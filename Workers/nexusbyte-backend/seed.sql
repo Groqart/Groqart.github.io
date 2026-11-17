@@ -1,19 +1,23 @@
 -- NexusByte Initial Catalog Seed Data
+-- Note: In production, ensure the corresponding B2 keys under seed/* are uploaded to your Backblaze B2 bucket,
+-- or publish real products via the Vendor Portal.
 -- Run with: wrangler d1 execute nexusbyte-db --remote --file=seed.sql
 
 INSERT OR IGNORE INTO users (id, email, role, display_name) VALUES
+  ('admin_nexusbyte', 'admin@nexusbyte.io', 'admin', 'NexusByte Trust & Safety'),
   ('vendor_alex_dev', 'alex@vortexlabs.dev', 'vendor', 'Alex Rivers (Vortex Labs)'),
   ('vendor_satoshi_forge', 'team@satoshiforge.io', 'vendor', 'SatoshiForge Systems'),
   ('vendor_polygon_studio', 'arts@polygonarts.io', 'vendor', 'PolygonArts Interactive');
 
-INSERT OR IGNORE INTO sellers (id, display_name, wallet_address, balance_cents) VALUES
-  ('vendor_alex_dev', 'Alex Rivers (Vortex Labs)', '0x1111111111111111111111111111111111111111', 0),
-  ('vendor_satoshi_forge', 'SatoshiForge Systems', '0x2222222222222222222222222222222222222222', 0),
-  ('vendor_polygon_studio', 'PolygonArts Interactive', '0x3333333333333333333333333333333333333333', 0);
+INSERT OR IGNORE INTO sellers (id, display_name, wallet_address, balance_cents, is_trusted) VALUES
+  ('vendor_alex_dev', 'Alex Rivers (Vortex Labs)', '0x1111111111111111111111111111111111111111', 0, 1),
+  ('vendor_satoshi_forge', 'SatoshiForge Systems', '0x2222222222222222222222222222222222222222', 0, 1),
+  ('vendor_polygon_studio', 'PolygonArts Interactive', '0x3333333333333333333333333333333333333333', 0, 1);
 
 INSERT OR IGNORE INTO products (
   id, seller_id, title, slug, price_cents, b2_file_key, file_name, file_size,
-  category, tagline, description, version, delivery_type, tags_json, features_json, status, created_at
+  category, tagline, description, version, delivery_type, tags_json, features_json,
+  banner_gradient, code_snippet_json, status, created_at
 ) VALUES
   (
     'prod_hypersaas_next15',
@@ -31,6 +35,8 @@ INSERT OR IGNORE INTO products (
     'both',
     '["Next.js 15","TypeScript","Tailwind v4","NOWPayments","Prisma","AI SDK"]',
     '["Next.js 15 App Router with Turbopack & React 19 Server Components","Plug-and-play NOWPayments Crypto & Stripe Dual Payment System","Role-based Access Control (RBAC) & Magic Link Authentication","AI Text & Image streaming pipeline ready out-of-the-box","Lifetime updates and private GitHub access included"]',
+    'from-blue-600 via-indigo-600 to-purple-700',
+    '{"language":"typescript","filename":"lib/nowpayments.ts","code":"export async function createCryptoCheckout(orderId: string, amountUSD: number) {\n  const res = await fetch(\x27https://api.nowpayments.io/v1/invoice\x27, {\n    method: \x27POST\x27,\n    headers: { \x27Content-Type\x27: \x27application/json\x27, \x27x-api-key\x27: process.env.NOWPAYMENTS_API_KEY! },\n    body: JSON.stringify({ price_amount: amountUSD, price_currency: \x27usd\x27, order_id: orderId }),\n  });\n  return await res.json();\n}"}',
     'published',
     '2026-08-15T00:00:00Z'
   ),
@@ -50,6 +56,8 @@ INSERT OR IGNORE INTO products (
     'both',
     '["Python 3.12","Telegram API","WebSockets","Raydium","AsyncIO"]',
     '["Sub-50ms mempool scanning with private RPC failover","Multi-wallet management with encrypted keystore","Interactive Telegram UI with custom inline keyboards & charts","Anti-MEV sandwich protection and simulated gas bumping","One-click Docker compose deployment included"]',
+    'from-emerald-600 via-teal-600 to-cyan-700',
+    '{"language":"python","filename":"engine/sniper.py","code":"import asyncio\nfrom web3 import AsyncWeb3\n\nclass SniperEngine:\n    def __init__(self, rpc_url: str):\n        self.w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(rpc_url))\n\n    async def monitor_mempool(self, pair_address: str):\n        print(f\"Monitoring pool: {pair_address}\")"}',
     'published',
     '2026-09-01T00:00:00Z'
   ),
@@ -69,6 +77,8 @@ INSERT OR IGNORE INTO products (
     'file',
     '["Unreal Engine 5","Blender","Unity","FBX","4K PBR","Mocap"]',
     '["UE5 Control Rig and Unity Mecanim compatible skeleton","4K UDIM textures (BaseColor, Metallic, Roughness, Normal, Emissive)","3 LOD levels (LOD0: 48k tris, LOD1: 22k tris, LOD2: 8k tris)","Custom sounds FX for footsteps, firing, and hydraulic servos included"]',
+    'from-amber-600 via-orange-600 to-rose-700',
+    NULL,
     'published',
     '2026-07-22T00:00:00Z'
   ),
@@ -88,6 +98,8 @@ INSERT OR IGNORE INTO products (
     'both',
     '["Rust","Tokio","HFT","Arbitrage","Zero-Allocation","WebSockets"]',
     '["Microsecond execution times with lock-free ring buffers","Triangular cross-pair pathfinding algorithm with graph theory","Direct order book level 2 & level 3 delta reconstitution","Configurable risk parameters and emergency stop triggers"]',
+    'from-violet-600 via-purple-600 to-indigo-800',
+    '{"language":"rust","filename":"src/orderbook/mod.rs","code":"pub struct OrderBookDelta {\n    pub bid_price: f64,\n    pub ask_price: f64,\n}\n\n#[inline(always)]\npub fn calculate_spread(best_bid: f64, best_ask: f64) -> f64 {\n    best_ask - best_bid\n}"}',
     'published',
     '2026-06-10T00:00:00Z'
   ),
@@ -106,7 +118,9 @@ INSERT OR IGNORE INTO products (
     'v3.1.0',
     'file',
     '["Figma","React 19","Tailwind CSS","Design Tokens","Accessibility"]',
-    '["1,400+ auto-layout components with interactive states","Semantic token system mapped 1:1 with Tailwind CSS v4 variables","45 full-page responsive dashboard templates included","Direct copy-paste React 19 + Framer Motion components"]',
+    '["1,400+ auto-layout components with interactive states","Semantic token system mapped 1:1 with Tailwind CSS v4 variables","45 full-page responsive dashboard templates included","Direct copy-paste React 19 + TypeScript components"]',
+    'from-fuchsia-600 via-pink-600 to-rose-600',
+    NULL,
     'published',
     '2026-05-18T00:00:00Z'
   ),
@@ -126,6 +140,17 @@ INSERT OR IGNORE INTO products (
     'both',
     '["Go (Golang)","Playwright","Fingerprinting","Cloudflare Bypass","Microservice"]',
     '["Dynamic WebGL & Canvas noise generation for zero fingerprint detection","Rotating proxy pool manager with latency-based routing","REST & gRPC endpoints with automatic retry backoff","Resource saving mode: blocks images/fonts automatically for 5x speed"]',
+    'from-sky-600 via-blue-600 to-cyan-700',
+    NULL,
     'published',
     '2026-08-04T00:00:00Z'
   );
+
+INSERT OR IGNORE INTO product_changelog (id, product_id, version, changes_json, created_at) VALUES
+  ('chg_hypersaas_241', 'prod_hypersaas_next15', 'v2.4.1', '["Upgraded to React 19 stable","Added zero-fee USDT TRC20 instant NOWPayments IPN webhook"]', '2026-10-18T00:00:00Z'),
+  ('chg_hypersaas_230', 'prod_hypersaas_next15', 'v2.3.0', '["New Tailwind CSS v4 styling architecture","Optimized database cold start times"]', '2026-09-02T00:00:00Z'),
+  ('chg_telebot_320', 'prod_telebot_sniper', 'v3.2.0', '["Added Solana Raydium CPMM pool auto-detection","Refactored async websocket reconnect loop"]', '2026-10-10T00:00:00Z'),
+  ('chg_cybermech_150', 'prod_cybermech_3d', 'v1.5.0', '["Added UE 5.5 retargeter profiles","Added Arctic Camo texture preset"]', '2026-09-20T00:00:00Z'),
+  ('chg_quantum_402', 'prod_rust_arbitrage', 'v4.0.2', '["Memory layout optimizations with SIMD parsing","Added Bybit V5 Unified Margin support"]', '2026-10-12T00:00:00Z'),
+  ('chg_aura_310', 'prod_aura_ui_system', 'v3.1.0', '["Integrated Tailwind v4 CSS theme variables","Added 8 crypto wallet connect dialog states"]', '2026-10-05T00:00:00Z'),
+  ('chg_omni_210', 'prod_omniscrape_cloud', 'v2.1.0', '["Updated to Chromium 130 fingerprint definitions","Added TLS client hello ja4 fingerprint emulation"]', '2026-09-28T00:00:00Z');

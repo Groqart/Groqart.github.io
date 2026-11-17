@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router';
 import {
   Download,
   Key,
@@ -9,8 +10,11 @@ import {
   Archive,
   RefreshCw,
   ShoppingBag,
+  Star,
+  ExternalLink,
 } from 'lucide-react';
 import type { Order } from '../types/marketplace';
+import { ReviewModal } from './ReviewModal';
 
 interface PurchasesVaultProps {
   orders: Order[];
@@ -28,6 +32,7 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [revealedKeyIds, setRevealedKeyIds] = useState<Record<string, boolean>>({});
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<Order | null>(null);
 
   const copyKey = (key: string, orderId: string) => {
     navigator.clipboard.writeText(key);
@@ -45,11 +50,11 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
   const paidOrders = orders.filter((o) => o.status === 'paid');
 
   const formatExpiresIn = (expiresAt?: number) => {
-    if (!expiresAt) return '15m signed link';
+    if (!expiresAt) return '15-minute signed link';
     const diffMs = expiresAt - Date.now();
-    if (diffMs <= 0) return 'Expired — click Refresh';
+    if (diffMs <= 0) return 'Expired — click Refresh Links';
     const mins = Math.floor(diffMs / (60 * 1000));
-    if (mins < 60) return `${mins}m remaining`;
+    if (mins < 60) return `${mins}m signed link`;
     const hours = Math.floor(mins / 60);
     return `${hours}h ${mins % 60}m remaining`;
   };
@@ -79,19 +84,22 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
             <h1 className="text-2xl font-black text-white tracking-tight sm:text-3xl">
               Digital Assets Library
             </h1>
-            <span className="rounded-full bg-cyan-950 px-2.5 py-0.5 text-xs font-semibold text-cyan-400 border border-cyan-800">
+            <span className="rounded-full bg-cyan-950 px-2.5 py-0.5 text-xs font-semibold text-cyan-400 border border-cyan-800 tabular-nums">
               {paidOrders.length} {paidOrders.length === 1 ? 'Product' : 'Products'}
             </span>
           </div>
           <p className="text-sm text-slate-400 mt-1">
-            Verified purchases for <span className="text-slate-200 font-medium">{userEmail}</span> • Time-limited signed downloads &amp; license keys.
+            Verified purchases for <span className="text-slate-200 font-medium">{userEmail}</span> • 15-minute signed download links &amp; license keys.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onRefreshOrders}
+            onClick={() => {
+              setDownloadNotice(null);
+              onRefreshOrders();
+            }}
             className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-300 hover:text-white transition cursor-pointer"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -134,6 +142,9 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
             const isRevealed = !!revealedKeyIds[order.id];
             const isCopied = copiedKeyId === order.id;
             const downloadHref = getDownloadHref(order);
+            const showDownloadPanel = order.deliveryType !== 'license_key';
+            const showLicensePanel =
+              order.deliveryType !== 'file' && Boolean(order.secureDelivery?.licenseKey);
 
             return (
               <div
@@ -143,21 +154,45 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
                 {/* Header info */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-md bg-cyan-950 px-2 py-0.5 text-[11px] font-semibold text-cyan-300 border border-cyan-800/60">
                         {order.productCategory}
                       </span>
                       <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-mono text-slate-300">
                         {order.productVersion}
                       </span>
+                      {order.hasReviewed ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300 border border-amber-500/30 tabular-nums">
+                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                          Reviewed ({order.reviewRating || 5}/5)
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setReviewTarget(order)}
+                          className="inline-flex items-center gap-1 rounded-md border border-cyan-500/40 bg-cyan-950/40 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-500/20 transition cursor-pointer"
+                        >
+                          <Star className="h-3 w-3" />
+                          <span>Leave Review</span>
+                        </button>
+                      )}
                     </div>
-                    <h3 className="text-lg font-bold text-white mt-1">
-                      {order.productTitle}
-                    </h3>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <h3 className="text-lg font-bold text-white">
+                        {order.productTitle}
+                      </h3>
+                      <Link
+                        to={`/product/${order.productId}`}
+                        aria-label={`Open product page for ${order.productTitle}`}
+                        className="text-slate-400 hover:text-cyan-300 transition"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
                   </div>
 
                   <div className="flex sm:flex-col items-start sm:items-end justify-between text-xs text-slate-400">
-                    <span className="font-mono text-emerald-400 font-semibold text-sm">
+                    <span className="font-mono text-emerald-400 font-semibold text-sm tabular-nums">
                       ${order.priceUSD} USD (Paid via {order.paymentMeta?.cryptoCurrency || 'NOWPayments'})
                     </span>
                     <span className="text-[11px]">
@@ -169,53 +204,55 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
                 {/* Secure Asset Delivery Box */}
                 <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* File Download section */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                          <Download className="h-4 w-4 text-cyan-400" />
-                          Digital Source Package
-                        </span>
-                        <span className="flex items-center gap-1 rounded bg-slate-900 px-2 py-0.5 text-[11px] font-mono text-cyan-300 border border-slate-800">
-                          <Clock className="h-3 w-3" />
-                          {formatExpiresIn(order.secureDelivery?.downloadExpiresAt)}
-                        </span>
+                  {showDownloadPanel && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                            <Download className="h-4 w-4 text-cyan-400" />
+                            Digital Source Package
+                          </span>
+                          <span className="flex items-center gap-1 rounded bg-slate-900 px-2 py-0.5 text-[11px] font-mono text-cyan-300 border border-slate-800 tabular-nums">
+                            <Clock className="h-3 w-3" />
+                            {formatExpiresIn(order.secureDelivery?.downloadExpiresAt)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mb-4">
+                          File:{' '}
+                          <span className="font-mono text-white">
+                            {order.secureDelivery?.fileName || 'package.zip'}
+                          </span>
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-400 mb-4">
-                        File:{' '}
-                        <span className="font-mono text-white">
-                          {order.secureDelivery?.fileName || 'package.zip'}
-                        </span>
-                      </p>
-                    </div>
 
-                    {downloadHref ? (
-                      <a
-                        href={downloadHref}
-                        download={order.secureDelivery?.fileName || 'package.zip'}
-                        className="flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow hover:bg-cyan-400 transition"
-                      >
-                        <Download className="h-4 w-4" />
-                        <span>Download Asset ({order.secureDelivery?.fileName || 'Archive'})</span>
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDownloadNotice('Refreshing signed download URL...');
-                          onRefreshOrders();
-                        }}
-                        className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-bold text-slate-200 hover:text-white transition cursor-pointer"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                        <span>Regenerate Download Link</span>
-                      </button>
-                    )}
-                  </div>
+                      {downloadHref ? (
+                        <a
+                          href={downloadHref}
+                          download={order.secureDelivery?.fileName || 'package.zip'}
+                          className="flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow hover:bg-cyan-400 transition"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span>Download Asset ({order.secureDelivery?.fileName || 'Archive'})</span>
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDownloadNotice('Refreshing 15-minute signed download URL...');
+                            onRefreshOrders();
+                          }}
+                          className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-bold text-slate-200 hover:text-white transition cursor-pointer"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                          <span>Regenerate 15m Link</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* License Key section */}
-                  {order.secureDelivery?.licenseKey ? (
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 flex flex-col justify-between">
+                  {showLicensePanel && order.secureDelivery?.licenseKey ? (
+                    <div className={`rounded-xl border border-slate-800 bg-slate-950/80 p-4 flex flex-col justify-between ${!showDownloadPanel ? 'md:col-span-2' : ''}`}>
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
@@ -231,7 +268,7 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
                           </button>
                         </div>
                         <p className="text-xs text-slate-400 mb-3">
-                          Assigned exclusively to {order.buyerEmail} for commercial software activation.
+                          Assigned exclusively to {order.buyerEmail} for commercial software activation (up to 3 activations).
                         </p>
                       </div>
 
@@ -264,6 +301,14 @@ export const PurchasesVault: React.FC<PurchasesVaultProps> = ({
             );
           })}
         </div>
+      )}
+
+      {reviewTarget && (
+        <ReviewModal
+          order={reviewTarget}
+          onClose={() => setReviewTarget(null)}
+          onSubmitted={onRefreshOrders}
+        />
       )}
     </div>
   );

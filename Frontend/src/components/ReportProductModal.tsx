@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Flag, X, Loader2, AlertCircle } from 'lucide-react';
 import { useMarketplace } from '../context/MarketplaceContext';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { API_BASE } from '../utils/apiBase';
 
 interface ReportProductModalProps {
   productId: string;

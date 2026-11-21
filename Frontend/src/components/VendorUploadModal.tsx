@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { X, Upload, FileArchive, ShieldAlert } from 'lucide-react';
 import type { ProductCategory, DeliveryType, LicenseType, Product } from '../types/marketplace';
 import { useMarketplace } from '../context/MarketplaceContext';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { API_BASE } from '../utils/apiBase';
 
 const BANNER_GRADIENTS = [
   { label: 'Cyan / Indigo', value: 'from-cyan-600 via-blue-600 to-indigo-700' },

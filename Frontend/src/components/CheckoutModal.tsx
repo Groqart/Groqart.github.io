@@ -56,51 +56,59 @@ export const CheckoutModal: React.FC = () => {
       role="dialog"
       aria-modal="true"
       aria-labelledby="checkout-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md"
     >
-      <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+      <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-[#111827]">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-4 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-50 border border-cyan-200 text-cyan-600 dark:bg-cyan-500/10 dark:border-cyan-500/30 dark:text-cyan-400">
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div>
-              <h3 id="checkout-modal-title" className="text-base font-bold text-white">
+              <h3 id="checkout-modal-title" className="text-base font-bold text-slate-900 dark:text-white">
                 NOWPayments Crypto Checkout
               </h3>
-              <p className="text-[11px] text-slate-400">Hosted Invoice • Instant Digital Delivery</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Hosted Invoice · Instant Digital Delivery
+              </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setPendingCheckout(null)}
             aria-label="Close checkout modal"
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition cursor-pointer"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white transition cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Product Summary */}
-        <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-2 text-xs">
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2 text-xs dark:border-slate-800 dark:bg-slate-950/80">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-semibold text-white truncate">{product.title}</span>
-            <span className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[11px] text-cyan-300 shrink-0">
+            <span className="font-semibold text-slate-900 dark:text-white truncate">
+              {product.title}
+            </span>
+            <span className="font-mono text-[11px] text-cyan-700 dark:text-cyan-300 shrink-0">
               {product.version}
             </span>
           </div>
-          <div className="flex items-center justify-between text-slate-400">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
             <span>{product.category}</span>
             <span>{product.fileInfo.fileName}</span>
           </div>
-          <div className="border-t border-slate-800 pt-2 flex items-center justify-between">
+          <div className="border-t border-slate-200 pt-2 flex items-center justify-between dark:border-slate-800">
             <div>
-              <span className="text-slate-400 block">Selected Asset</span>
-              <span className="text-[11px] text-cyan-300">{selectedCurrency} • {networkMeta.network}</span>
+              <span className="text-slate-500 dark:text-slate-400 block">Selected Asset</span>
+              <span className="text-[11px] text-cyan-700 dark:text-cyan-300">
+                {selectedCurrency} · {networkMeta.network}
+              </span>
             </div>
             <div className="text-right">
-              <span className="text-base font-extrabold text-white tabular-nums">${product.priceUSD.toFixed(2)} USD</span>
-              <span className="block text-[10px] text-slate-400">
+              <span className="text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
+                ${product.priceUSD.toFixed(2)} USD
+              </span>
+              <span className="block text-[10px] text-slate-500 dark:text-slate-400">
                 Exact rate locked on invoice
               </span>
             </div>
@@ -108,7 +116,7 @@ export const CheckoutModal: React.FC = () => {
         </div>
 
         {errorMsg && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-300">
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-300">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
@@ -116,7 +124,9 @@ export const CheckoutModal: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <span className="font-semibold text-slate-300 block mb-1.5">Preferred Crypto Asset</span>
+            <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+              Preferred Crypto Asset
+            </span>
             <div className="grid grid-cols-5 gap-1.5">
               {(['USDT', 'BTC', 'ETH', 'LTC', 'SOL'] as CryptoCurrency[]).map((cur) => (
                 <button
@@ -125,8 +135,8 @@ export const CheckoutModal: React.FC = () => {
                   onClick={() => setSelectedCurrency(cur)}
                   className={`rounded-lg py-1.5 text-[11px] font-semibold transition border cursor-pointer ${
                     selectedCurrency === cur
-                      ? 'border-cyan-400 bg-cyan-950/60 text-cyan-300'
-                      : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
+                      ? 'border-cyan-500 bg-cyan-50 text-cyan-800 dark:border-cyan-400 dark:bg-cyan-950/60 dark:text-cyan-300'
+                      : 'border-slate-200 bg-white text-slate-600 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
                   {cur}
@@ -138,9 +148,9 @@ export const CheckoutModal: React.FC = () => {
           <div>
             <label
               htmlFor="checkout-buyer-email"
-              className="flex items-center gap-1.5 font-semibold text-slate-300 mb-1.5"
+              className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
             >
-              <Mail className="h-3.5 w-3.5 text-cyan-400" />
+              <Mail className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
               Delivery Email Address
             </label>
             <input
@@ -151,25 +161,25 @@ export const CheckoutModal: React.FC = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-cyan-500 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
             />
-            <p className="mt-1.5 text-[11px] text-slate-400">
-              Exact crypto amount &amp; network fee are locked on the NOWPayments Hosted Invoice. Your 15-minute signed download link can be regenerated anytime in My Library.
+            <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+              Exact crypto amount &amp; network fee are locked on the NOWPayments Hosted Invoice.
             </p>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
             <button
               type="button"
               onClick={() => setPendingCheckout(null)}
-              className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 font-medium text-slate-400 hover:text-white transition cursor-pointer"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-medium text-slate-600 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:text-white transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2.5 font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition disabled:opacity-50 cursor-pointer"
+              className="flex items-center justify-center gap-2 rounded-xl bg-[#0EA5E9] px-5 py-2.5 font-bold text-white shadow-sm hover:bg-[#0284C7] transition disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? (
                 <>

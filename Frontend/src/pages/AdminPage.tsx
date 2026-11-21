@@ -16,8 +16,7 @@ import {
 import { useMarketplace } from '../context/MarketplaceContext';
 import { AuthMagicLinkCard } from '../components/AuthMagicLinkCard';
 import type { AdminOverviewData } from '../types/marketplace';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { API_BASE } from '../utils/apiBase';
 
 export const AdminPage: React.FC = () => {
   const { user, authToken, isAuthLoading, showToast, fetchProducts } = useMarketplace();
@@ -169,8 +168,8 @@ export const AdminPage: React.FC = () => {
   if (isAuthLoading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-16 text-center">
-        <Loader2 className="h-7 w-7 animate-spin text-cyan-400 mx-auto mb-2" />
-        <p className="text-xs text-slate-400">Checking admin credentials...</p>
+        <Loader2 className="h-7 w-7 animate-spin text-cyan-500 mx-auto mb-2" />
+        <p className="text-xs text-slate-500 dark:text-slate-400">Checking admin credentials...</p>
       </div>
     );
   }
@@ -179,10 +178,10 @@ export const AdminPage: React.FC = () => {
     return (
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-black text-white tracking-tight sm:text-3xl">
+          <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white tracking-tight sm:text-3xl">
             Platform Moderation &amp; Admin
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
             Sign in with your administrator Magic Link to manage product reviews, seller trust, and buyer reports.
           </p>
         </div>
@@ -198,16 +197,16 @@ export const AdminPage: React.FC = () => {
   if (user.role !== 'admin') {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center space-y-4">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 dark:text-rose-400">
           <ShieldAlert className="h-6 w-6" />
         </div>
-        <h1 className="text-xl font-bold text-white">403 — Admin Access Required</h1>
-        <p className="text-xs text-slate-400">
-          Signed in as <strong className="text-slate-200">{user.email}</strong> ({user.role}). This console is restricted to platform administrators.
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">403 — Admin Access Required</h1>
+        <p className="text-xs text-slate-600 dark:text-slate-400">
+          Signed in as <strong className="text-slate-900 dark:text-slate-200">{user.email}</strong> ({user.role}). This console is restricted to platform administrators.
         </p>
         <Link
           to="/"
-          className="inline-block rounded-xl bg-slate-800 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-700 transition"
+          className="inline-block rounded-xl bg-slate-900 dark:bg-slate-800 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 dark:hover:bg-slate-700 transition"
         >
           Back to Marketplace
         </Link>
@@ -217,23 +216,23 @@ export const AdminPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
         <div>
           <div className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-cyan-400" />
-            <h1 className="text-2xl font-black text-white tracking-tight sm:text-3xl">
+            <Shield className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+            <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white tracking-tight sm:text-3xl">
               Trust &amp; Moderation Console
             </h1>
           </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Operator: <span className="text-slate-200 font-medium">{user.email}</span>
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
+            Operator: <span className="text-slate-900 dark:text-slate-200 font-medium">{user.email}</span>
           </p>
         </div>
         <button
           type="button"
           onClick={loadOverview}
           disabled={loadingData}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white transition cursor-pointer"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loadingData ? 'animate-spin' : ''}`} />
           <span>Refresh Console</span>
@@ -241,7 +240,7 @@ export const AdminPage: React.FC = () => {
       </div>
 
       {errorMsg && (
-        <div className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-4 text-xs text-rose-300">
+        <div className="rounded-xl border border-rose-500/40 bg-rose-50 p-4 text-xs text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">
           {errorMsg}
         </div>
       )}
@@ -250,65 +249,65 @@ export const AdminPage: React.FC = () => {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 tabular-nums">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
                 <span>Platform Revenue (5%)</span>
-                <DollarSign className="h-4 w-4 text-emerald-400" />
+                <DollarSign className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
               </div>
-              <div className="text-2xl font-extrabold text-white">
+              <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
                 ${overview.stats.platformRevenueUSD.toFixed(2)}
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                 {overview.stats.finishedOrders} settled orders
               </p>
             </div>
 
-            <div className="rounded-2xl border border-amber-500/30 bg-amber-950/15 p-5">
-              <div className="flex items-center justify-between text-xs text-amber-300 mb-2">
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-50/70 p-5 dark:bg-amber-950/15">
+              <div className="flex items-center justify-between text-xs text-amber-700 dark:text-amber-300 mb-2">
                 <span>Pending Moderation</span>
-                <ShieldAlert className="h-4 w-4 text-amber-400" />
+                <ShieldAlert className="h-4 w-4 text-amber-500 dark:text-amber-400" />
               </div>
-              <div className="text-2xl font-extrabold text-white">
+              <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
                 {overview.stats.pendingReviewCount}
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                 {overview.stats.totalProducts} active listings total
               </p>
             </div>
 
-            <div className="rounded-2xl border border-rose-500/30 bg-rose-950/15 p-5">
-              <div className="flex items-center justify-between text-xs text-rose-300 mb-2">
+            <div className="rounded-2xl border border-rose-500/30 bg-rose-50/70 p-5 dark:bg-rose-950/15">
+              <div className="flex items-center justify-between text-xs text-rose-700 dark:text-rose-300 mb-2">
                 <span>Open Reports</span>
-                <Flag className="h-4 w-4 text-rose-400" />
+                <Flag className="h-4 w-4 text-rose-500 dark:text-rose-400" />
               </div>
-              <div className="text-2xl font-extrabold text-white">
+              <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
                 {overview.stats.openReportsCount}
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">Buyer safety flags</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Buyer safety flags</p>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
                 <span>Creators &amp; Users</span>
-                <Users className="h-4 w-4 text-cyan-400" />
+                <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
               </div>
-              <div className="text-2xl font-extrabold text-white">
+              <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
                 {overview.stats.totalSellers} / {overview.stats.totalUsers}
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">Sellers / total users</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Sellers / total users</p>
             </div>
           </div>
 
           {/* Product Moderation Queue */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-            <h2 className="text-base font-bold text-white flex items-center gap-2 mb-4">
-              <ShieldCheck className="h-4 w-4 text-cyan-400" />
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+              <ShieldCheck className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
               <span>Product Moderation Queue</span>
             </h2>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs tabular-nums">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-400">
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
                     <th className="pb-3 font-semibold">Listing</th>
                     <th className="pb-3 font-semibold">Seller</th>
                     <th className="pb-3 font-semibold">Status</th>

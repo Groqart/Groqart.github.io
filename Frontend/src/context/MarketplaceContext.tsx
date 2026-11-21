@@ -8,10 +8,16 @@ import type {
   UserRole,
 } from '../types/marketplace';
 import { getPayCurrencyTicker } from '../utils/nowpaymentsLogic';
+import {
+  resolveTheme,
+  type ResolvedTheme,
+  type ThemePreference,
+} from '../utils/catalogLogic';
+import { API_BASE } from '../utils/apiBase';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
 const AUTH_TOKEN_KEY = 'nexusbyte_auth_token';
 const BUYER_EMAIL_KEY = 'nexusbyte_buyer_email';
+const THEME_STORAGE_KEY = 'zenxusbay_theme';
 
 export interface PendingCheckout {
   product: Product;
@@ -24,6 +30,9 @@ interface MarketplaceContextType {
   orders: Order[];
   cart: Product[];
   isCartOpen: boolean;
+  isSidebarOpen: boolean;
+  themePreference: ThemePreference;
+  resolvedTheme: ResolvedTheme;
   currentRole: UserRole;
   pendingCheckout: PendingCheckout | null;
   toastMessage: string | null;
@@ -32,6 +41,9 @@ interface MarketplaceContextType {
   seller: SellerProfile | null;
   isAuthLoading: boolean;
   setIsCartOpen: (open: boolean) => void;
+  setIsSidebarOpen: (open: boolean) => void;
+  toggleSidebar: () => void;
+  setThemePreference: (pref: ThemePreference) => void;
   setCurrentRole: (role: UserRole) => void;
   setPendingCheckout: (checkout: PendingCheckout | null) => void;
   showToast: (msg: string) => void;
@@ -68,6 +80,9 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<Product[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>('system');
+  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [currentRole, setCurrentRole] = useState<UserRole>('buyer');
   const [pendingCheckout, setPendingCheckout] = useState<PendingCheckout | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -76,6 +91,41 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [user, setUser] = useState<AuthUser | null>(null);
   const [seller, setSeller] = useState<SellerProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (storedTheme === 'light' || storedTheme === 'dark' || storedTheme === 'system') {
+      setThemePreferenceState(storedTheme);
+    }
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    setSystemPrefersDark(mq.matches);
+    const handleChange = (e: MediaQueryListEvent) => setSystemPrefersDark(e.matches);
+    mq.addEventListener('change', handleChange);
+
+    if (window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
+    }
+    return () => mq.removeEventListener('change', handleChange);
+  }, []);
+
+  const resolvedTheme = resolveTheme(themePreference, systemPrefersDark);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
+  }, [resolvedTheme]);
+
+  const setThemePreference = useCallback((pref: ThemePreference) => {
+    setThemePreferenceState(pref);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(THEME_STORAGE_KEY, pref);
+    }
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen((prev) => !prev);
+  }, []);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -357,6 +407,9 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
         orders,
         cart,
         isCartOpen,
+        isSidebarOpen,
+        themePreference,
+        resolvedTheme,
         currentRole,
         pendingCheckout,
         toastMessage,
@@ -365,6 +418,9 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
         seller,
         isAuthLoading,
         setIsCartOpen,
+        setIsSidebarOpen,
+        toggleSidebar,
+        setThemePreference,
         setCurrentRole,
         setPendingCheckout,
         showToast,

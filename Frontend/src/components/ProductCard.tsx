@@ -1,162 +1,211 @@
-import React from 'react';
-import { Star, Download, Key, ShieldCheck, Zap, Eye, BadgeCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  Star,
+  Download,
+  Key,
+  BadgeCheck,
+  Bookmark,
+  Eye,
+  ShoppingBag,
+  Forward,
+  Check,
+} from 'lucide-react';
 import type { Product } from '../types/marketplace';
+import { getCreatorInitials } from '../utils/catalogLogic';
 
 interface ProductCardProps {
   product: Product;
+  isSaved?: boolean;
   onViewDetails: (product: Product) => void;
   onQuickBuy: (product: Product) => void;
-}
-
-function getInitials(name: string): string {
-  const parts = String(name || 'NV').trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+  onToggleSave?: (product: Product) => void;
+  onShareLink?: (product: Product) => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
+  isSaved = false,
   onViewDetails,
   onQuickBuy,
+  onToggleSave,
+  onShareLink,
 }) => {
-  return (
-    <div className="group relative flex flex-col rounded-2xl border border-slate-800 bg-slate-900/50 p-4 transition-all duration-300 hover:border-slate-700 hover:bg-slate-900/90 hover:shadow-xl hover:shadow-cyan-500/5">
-      {/* Visual Header / Banner */}
-      <div className={`relative mb-4 h-36 w-full overflow-hidden rounded-xl bg-gradient-to-br ${product.bannerGradient} p-4 flex flex-col justify-between shadow-inner`}>
-        {/* Subtle grid pattern overlay */}
-        <div className="absolute inset-0 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] opacity-15" />
+  const [linkCopied, setLinkCopied] = useState(false);
 
-        <div className="relative z-10 flex items-center justify-between">
-          <span className="rounded-full bg-slate-950/70 px-2.5 py-0.5 text-xs font-semibold text-white backdrop-blur-md border border-white/10">
-            {product.category}
+  const deliveryLabel =
+    product.deliveryType === 'both'
+      ? 'File + License Key'
+      : product.deliveryType === 'license_key'
+      ? 'License Key'
+      : 'Direct Download';
+
+  const metadataLine = [product.category, ...product.tags.slice(0, 2)].join(' · ');
+
+  const handleShare = () => {
+    onShareLink?.(product);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 1800);
+  };
+
+  return (
+    <article className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-500/50 hover:shadow-lg dark:border-slate-800/90 dark:bg-[#111827] dark:hover:border-cyan-500/40">
+      {/* 16:9 Visual Thumbnail Preview */}
+      <button
+        type="button"
+        onClick={() => onViewDetails(product)}
+        aria-label={`Inspect ${product.title}`}
+        className={`relative aspect-[16/9] w-full overflow-hidden bg-gradient-to-br ${product.bannerGradient} p-4 text-left flex flex-col justify-between cursor-pointer focus-visible:outline-2 focus-visible:outline-cyan-500`}
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] opacity-15" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/15 to-transparent" />
+
+        <div className="relative z-10 flex items-center justify-between text-xs text-white/95">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-950/70 px-2.5 py-1 text-[11px] font-medium backdrop-blur-sm">
+            {product.deliveryType === 'license_key' ? (
+              <Key className="h-3 w-3 text-amber-300" />
+            ) : (
+              <Download className="h-3 w-3 text-cyan-300" />
+            )}
+            <span>{deliveryLabel}</span>
           </span>
-          <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[11px] font-mono font-medium text-cyan-200 backdrop-blur-md border border-cyan-400/30">
+          <span className="rounded-md bg-slate-950/70 px-2 py-1 font-mono text-[11px] text-slate-200 tabular-nums backdrop-blur-sm">
             {product.version}
           </span>
         </div>
 
-        <div className="relative z-10 flex items-end justify-between">
-          <div className="flex items-center gap-1.5">
-            {product.deliveryType === 'both' ? (
-              <span className="inline-flex items-center gap-1 rounded bg-slate-950/80 px-2 py-0.5 text-[11px] font-medium text-emerald-300 border border-emerald-500/30 backdrop-blur-md">
-                <Download className="h-3 w-3" /> + <Key className="h-3 w-3" /> File &amp; License
-              </span>
-            ) : product.deliveryType === 'license_key' ? (
-              <span className="inline-flex items-center gap-1 rounded bg-slate-950/80 px-2 py-0.5 text-[11px] font-medium text-amber-300 border border-amber-500/30 backdrop-blur-md">
-                <Key className="h-3 w-3" /> License Key
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 rounded bg-slate-950/80 px-2 py-0.5 text-[11px] font-medium text-blue-300 border border-blue-500/30 backdrop-blur-md">
-                <Download className="h-3 w-3" /> Direct Download
-              </span>
-            )}
-          </div>
-          <span className="text-[11px] font-mono text-white/80 bg-slate-950/50 px-2 py-0.5 rounded tabular-nums">
+        <div className="relative z-10 flex items-end justify-between gap-3">
+          <span className="font-mono text-[11px] text-white/90 truncate">
+            {product.fileInfo.fileName}
+          </span>
+          <span className="font-mono text-[11px] text-white/90 tabular-nums shrink-0">
             {product.fileInfo.fileSize}
           </span>
         </div>
-      </div>
+      </button>
 
-      {/* Title & Tagline */}
-      <div className="flex-1">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <h3 className="text-base font-bold text-white group-hover:text-cyan-300 transition-colors line-clamp-1">
+      {/* Card Body */}
+      <div className="flex flex-1 flex-col p-4">
+        {/* Title */}
+        <button
+          type="button"
+          onClick={() => onViewDetails(product)}
+          className="text-left cursor-pointer focus-visible:outline-2 focus-visible:outline-cyan-500 rounded"
+        >
+          <h2 className="font-display text-base font-semibold text-slate-900 group-hover:text-cyan-700 dark:text-white dark:group-hover:text-cyan-300 transition-colors line-clamp-1">
             {product.title}
-          </h3>
-        </div>
-        <p className="text-xs text-slate-400 line-clamp-2 mb-3 leading-relaxed">
+          </h2>
+        </button>
+
+        {/* Quiet unboxed metadata line */}
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 truncate">
+          {metadataLine}
+        </p>
+
+        {/* Short description */}
+        <p className="mt-2 text-xs text-slate-600 dark:text-slate-300/90 line-clamp-2 leading-relaxed">
           {product.tagline}
         </p>
 
-        {/* Tags */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {product.tags.slice(0, 3).map((tag) => (
-            <span
-              key={tag}
-              className="rounded bg-slate-800/80 px-2 py-0.5 text-[11px] font-medium text-slate-300 border border-slate-700/50"
+        {/* Creator + Rating row */}
+        <div className="mt-auto pt-4 flex items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              aria-hidden="true"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-cyan-300"
             >
-              {tag}
+              {getCreatorInitials(product.vendorName)}
+            </div>
+            <span className="truncate font-medium text-slate-700 dark:text-slate-300">
+              {product.vendorName}
             </span>
-          ))}
-          {product.tags.length > 3 && (
-            <span className="rounded bg-slate-800/40 px-1.5 py-0.5 text-[10px] text-slate-400">
-              +{product.tags.length - 3}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Vendor & Rating */}
-      <div className="border-t border-slate-800/80 pt-3 pb-3 flex items-center justify-between text-xs text-slate-400">
-        <div className="flex items-center gap-2 min-w-0">
-          <div
-            aria-hidden="true"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-[10px] font-bold text-cyan-300"
-          >
-            {getInitials(product.vendorName)}
+            {product.isTrustedVendor && (
+              <BadgeCheck
+                className="h-3.5 w-3.5 shrink-0 text-cyan-600 dark:text-cyan-400"
+                aria-label="Verified creator"
+              />
+            )}
           </div>
-          <span className="truncate max-w-[115px] font-medium text-slate-300">
-            {product.vendorName}
-          </span>
-          {product.isTrustedVendor && (
-            <BadgeCheck
-              className="h-3.5 w-3.5 shrink-0 text-cyan-400"
-              aria-label="Verified trusted creator"
-            />
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
-          {product.reviewsCount > 0 ? (
-            <span className="flex items-center gap-1 text-amber-400">
-              <Star className="h-3.5 w-3.5 fill-amber-400" />
-              <span className="font-semibold text-white">{product.rating.toFixed(1)}</span>
-              <span className="text-[11px] text-slate-400">({product.reviewsCount})</span>
-            </span>
-          ) : (
-            <span className="rounded bg-slate-800/80 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300 border border-slate-700">
-              New
-            </span>
-          )}
-          {product.salesCount > 0 && (
-            <span className="text-[11px] text-slate-400">• {product.salesCount} sold</span>
-          )}
-        </div>
-      </div>
 
-      {/* Pricing & Actions */}
-      <div className="mt-auto pt-2 flex items-center justify-between border-t border-slate-800/60">
-        <div>
-          <div className="text-lg font-bold text-white tracking-tight tabular-nums">
+          <div className="flex items-center gap-1.5 shrink-0 tabular-nums text-slate-600 dark:text-slate-400">
+            {product.reviewsCount > 0 ? (
+              <span className="inline-flex items-center gap-1">
+                <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-400" />
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  {product.rating.toFixed(1)}
+                </span>
+                <span>({product.reviewsCount})</span>
+              </span>
+            ) : (
+              <span className="text-cyan-700 dark:text-cyan-300 font-medium">New</span>
+            )}
+            {product.salesCount > 0 && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{product.salesCount} sold</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Price & Action Row */}
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+          <div className="shrink-0 text-lg font-bold text-slate-950 dark:text-white tabular-nums leading-none">
             ${product.priceUSD}
-            <span className="text-[11px] font-normal text-slate-400 ml-1">USD</span>
           </div>
-          <div className="text-[10px] font-mono text-cyan-400 flex items-center gap-1">
-            <Zap className="h-2.5 w-2.5" />
-            USDT · BTC · ETH · SOL
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onViewDetails(product)}
-            aria-label={`View details for ${product.title}`}
-            className="flex h-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 px-3 text-xs font-medium text-slate-300 hover:border-slate-600 hover:text-white transition cursor-pointer"
-          >
-            <Eye className="h-3.5 w-3.5 mr-1" />
-            Details
-          </button>
-          <button
-            type="button"
-            onClick={() => onQuickBuy(product)}
-            aria-label={`Buy ${product.title} with NOWPayments`}
-            className="flex h-9 items-center justify-center rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-3.5 text-xs font-semibold text-white shadow-sm hover:from-cyan-400 hover:to-blue-500 hover:shadow-cyan-500/25 transition cursor-pointer"
-          >
-            <ShieldCheck className="h-3.5 w-3.5 mr-1 text-cyan-200" />
-            Buy
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => onQuickBuy(product)}
+              aria-label={`Buy ${product.title}`}
+              className="flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#0EA5E9] px-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] transition cursor-pointer whitespace-nowrap"
+            >
+              <ShoppingBag className="h-3.5 w-3.5" />
+              <span>Buy Now</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewDetails(product)}
+              aria-label={`Details for ${product.title}`}
+              className="flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white transition cursor-pointer whitespace-nowrap"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              <span>Details</span>
+            </button>
+            {onShareLink && (
+              <button
+                type="button"
+                onClick={handleShare}
+                aria-label={`Share link to ${product.title}`}
+                title="Share product link"
+                className={`flex h-9 w-8 items-center justify-center rounded-xl border transition cursor-pointer ${
+                  linkCopied
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                {linkCopied ? <Check className="h-4 w-4" /> : <Forward className="h-4 w-4" />}
+              </button>
+            )}
+            {onToggleSave && (
+              <button
+                type="button"
+                onClick={() => onToggleSave(product)}
+                aria-label={isSaved ? `Remove ${product.title} from saved` : `Save ${product.title}`}
+                aria-pressed={isSaved}
+                title={isSaved ? 'Saved' : 'Save item'}
+                className={`flex h-9 w-8 items-center justify-center rounded-xl border transition cursor-pointer ${
+                  isSaved
+                    ? 'border-cyan-500 bg-cyan-50 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300'
+                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                <Bookmark className={`h-4 w-4 ${isSaved ? 'fill-current' : ''}`} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </article>
   );
 };

@@ -11,6 +11,11 @@ export default defineConfig({
     nexusbyteApiPlugin(),
     reactRouter(), // подключает возможности Remix / React Router
   ],
+  define: {
+    ...(process.env.VITE_API_URL?.includes('your-worker.workers.dev')
+      ? { 'import.meta.env.VITE_API_URL': JSON.stringify('') }
+      : {}),
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,

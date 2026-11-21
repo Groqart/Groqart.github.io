@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Star, X, Loader2, AlertCircle } from 'lucide-react';
 import type { Order } from '../types/marketplace';
 import { useMarketplace } from '../context/MarketplaceContext';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { API_BASE } from '../utils/apiBase';
 
 interface ReviewModalProps {
   order: Order;

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" fill="none">
+  <defs>
+    <linearGradient id="zenxusbay-top" x1="18" y1="115" x2="298" y2="35" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1A8BB8"/>
+      <stop offset="55%" stop-color="#5CE1E6"/>
+      <stop offset="100%" stop-color="#AEEFF6"/>
+    </linearGradient>
+    <linearGradient id="zenxusbay-trace" x1="148" y1="235" x2="298" y2="45" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1785B2"/>
+      <stop offset="55%" stop-color="#45CEDB"/>
+      <stop offset="100%" stop-color="#34EAEC"/>
+    </linearGradient>
+    <linearGradient id="zenxusbay-wave-back" x1="20" y1="275" x2="148" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#147FB3"/>
+      <stop offset="58%" stop-color="#2EC6D9"/>
+      <stop offset="100%" stop-color="#8DF0F4"/>
+    </linearGradient>
+    <linearGradient id="zenxusbay-wave-mid" x1="78" y1="185" x2="158" y2="285" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0A4F82"/>
+      <stop offset="55%" stop-color="#1780B0"/>
+      <stop offset="100%" stop-color="#2BB0CA"/>
+    </linearGradient>
+    <linearGradient id="zenxusbay-wave-front" x1="108" y1="215" x2="275" y2="275" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1273A3"/>
+      <stop offset="48%" stop-color="#33C4D6"/>
+      <stop offset="100%" stop-color="#69F0EA"/>
+    </linearGradient>
+    <clipPath id="zenxusbay-wave-clip">
+      <path d="M 19,289.5 L 19,264.5 C 19,249.5 24.5,237.5 33.5,224.5 C 57.5,188.5 84.5,158.5 109.5,147.5 C 131.5,137.5 160.5,143.5 175,176 C 162.5,168.5 148.5,169.5 139.5,179.5 C 129.5,191.5 131.5,213.5 146.5,232.5 C 170.5,261.5 221.5,275.5 259.5,264.5 C 268.5,261.5 275.5,257.5 280.5,253 C 267,274 247,289.5 219,289.5 Z"/>
+    </clipPath>
+  </defs>
+  <path fill="url(#zenxusbay-top)" fill-rule="evenodd" d="M 59.5,38 L 247.5,38 L 233,54.5 L 68.5,54.5 L 44.5,83.5 L 194.2,83.5 A 17.5,17.5 0 1,1 203.4,93 L 158,141 L 140.5,133.5 L 176,97.5 L 18.5,97.5 Z M 202,77 A 8.5,8.5 0 1,0 219,77 A 8.5,8.5 0 1,0 202,77 Z"/>
+  <path fill="url(#zenxusbay-trace)" d="M 264,62.5 A 20.5,20.5 0 1,1 274,70.2 L 182.5,163 L 173,150 Z"/>
+  <path fill="url(#zenxusbay-trace)" fill-rule="evenodd" d="M 245,130.7 A 16.5,16.5 0 1,1 255.5,138.1 L 177,217 C 188,223.5 220,225 301.5,225 C 286.5,251.5 261.5,261.5 227.5,257.5 C 195.5,253.5 170.5,236.5 153.5,217 Z M 250.8,122 A 8.2,8.2 0 1,0 267.2,122 A 8.2,8.2 0 1,0 250.8,122 Z"/>
+  <g clip-path="url(#zenxusbay-wave-clip)">
+    <rect x="14" y="136" width="275" height="160" fill="url(#zenxusbay-wave-back)"/>
+    <path fill="url(#zenxusbay-wave-mid)" d="M 92.5,289.5 C 71.5,249.5 73.5,207.5 98.5,175.5 C 120.5,148.5 155.5,149.5 175,176 L 198,289.5 Z"/>
+    <path fill="url(#zenxusbay-wave-front)" d="M 173.5,289.5 C 127.5,267.5 103.5,231.5 104.5,199.5 C 105.5,172.5 133.5,156.5 175,176 L 292.5,245.5 L 292.5,293.5 Z"/>
+    <path fill="#C0F5FA" fill-opacity="0.55" d="M 19,264.5 C 19,249.5 24.5,237.5 33.5,224.5 C 57.5,188.5 84.5,158.5 109.5,147.5 C 131.5,137.5 160.5,143.5 175,176 C 155,152 130,148 109,158 C 83,170 55,204 28,246 C 22,255 19,261 19,264.5 Z"/>
+  </g>
+</svg>

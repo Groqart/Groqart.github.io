@@ -1,12 +1,16 @@
-import type { MetaFunction } from "react-router";
-import { MarketplacePage } from "../pages/MarketplacePage";
+import type { MetaFunction } from 'react-router';
+import { MarketplacePage } from '../pages/MarketplacePage';
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "NexusByte — Digital Goods Marketplace & Crypto Settlement" },
-    { name: "description", content: "Buy and sell developer boilerplates, trading bots, scripts and 3D assets with instant NOWPayments crypto checkout." },
-    { property: "og:title", content: "NexusByte Marketplace" },
-    { property: "og:type", content: "website" },
+    { title: 'ZenxusBay — Digital Goods Marketplace & Crypto Checkout' },
+    {
+      name: 'description',
+      content:
+        'Buy and sell developer boilerplates, trading bots, scripts and 3D assets on ZenxusBay with instant NOWPayments crypto checkout.',
+    },
+    { property: 'og:title', content: 'ZenxusBay Marketplace' },
+    { property: 'og:type', content: 'website' },
   ];
 };
 

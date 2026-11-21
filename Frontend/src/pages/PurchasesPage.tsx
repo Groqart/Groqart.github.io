@@ -14,8 +14,7 @@ import {
 import { PurchasesVault } from '../components/PurchasesVault';
 import { AuthMagicLinkCard } from '../components/AuthMagicLinkCard';
 import { useMarketplace } from '../context/MarketplaceContext';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { API_BASE } from '../utils/apiBase';
 
 interface OrderStatusPayload {
   status: string;
@@ -290,10 +289,10 @@ export const PurchasesPage: React.FC = () => {
       ) : (
         <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
           <div className="mb-6 text-center">
-            <h1 className="text-2xl font-black text-white tracking-tight sm:text-3xl">
+            <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white tracking-tight sm:text-3xl">
               My Digital Library
             </h1>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
               Sign in with a passwordless Magic Link to access all past purchases and regenerate signed download links.
             </p>
           </div>

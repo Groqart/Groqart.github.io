@@ -25,8 +25,8 @@ import { VendorUploadModal } from './VendorUploadModal';
 import { VendorEditProductModal } from './VendorEditProductModal';
 import { AuthMagicLinkCard } from './AuthMagicLinkCard';
 import { useMarketplace } from '../context/MarketplaceContext';
+import { API_BASE } from '../utils/apiBase';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
 const EVM_REGEX = /^0x[a-fA-F0-9]{40}$/;
 
 interface VendorDashboardProps {
@@ -260,10 +260,10 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     return (
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-black text-white tracking-tight sm:text-3xl">
+          <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white tracking-tight sm:text-3xl">
             Vendor Portal
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
             Sign in with a Magic Link to publish digital assets, track crypto sales, and withdraw USDC on Base.
           </p>
         </div>
@@ -279,23 +279,23 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   if (!seller) {
     return (
       <div className="mx-auto max-w-xl px-4 py-10 sm:px-6">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-6 sm:p-8 shadow-xl">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xl dark:border-slate-800 dark:bg-slate-900/75">
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-50 border border-cyan-200 text-cyan-600 dark:bg-cyan-500/10 dark:border-cyan-500/30 dark:text-cyan-400">
               <Store className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white">Complete Vendor Onboarding</h1>
-              <p className="text-xs text-slate-400">Signed in as {user.email}</p>
+              <h1 className="text-lg font-bold text-slate-900 dark:text-white">Complete Vendor Onboarding</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Signed in as {user.email}</p>
             </div>
           </div>
 
-          <p className="text-xs text-slate-300 leading-relaxed mb-5">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-5">
             Set your public creator store name and your Base network USDC payout wallet address. You retain 95% of every crypto sale.
           </p>
 
           {onboardingError && (
-            <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-300">
+            <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-50 p-3 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{onboardingError}</span>
             </div>
@@ -303,7 +303,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
           <form onSubmit={handleSaveSellerProfile} className="space-y-4 text-xs">
             <div>
-              <label htmlFor="onboard-display-name" className="block font-semibold text-slate-300 mb-1.5">
+              <label htmlFor="onboard-display-name" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Creator / Studio Display Name *
               </label>
               <input
@@ -314,12 +314,12 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="e.g. CyberLabs Studio"
-                className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-cyan-500 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
               />
             </div>
 
             <div>
-              <label htmlFor="onboard-wallet" className="block font-semibold text-slate-300 mb-1.5">
+              <label htmlFor="onboard-wallet" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 USDC Payout Wallet (Base / EVM 0x...) *
               </label>
               <input
@@ -329,14 +329,14 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 value={walletAddress}
                 onChange={(e) => setWalletAddress(e.target.value)}
                 placeholder="0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-                className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 font-mono text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 font-mono text-xs text-slate-900 placeholder-slate-400 focus:border-cyan-500 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
               />
             </div>
 
             <button
               type="submit"
               disabled={isSavingSeller}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition disabled:opacity-50 cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0EA5E9] py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#0284C7] transition disabled:opacity-50 cursor-pointer"
             >
               {isSavingSeller ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               <span>Activate Vendor Studio</span>
@@ -355,20 +355,20 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-black text-white tracking-tight sm:text-3xl">
+            <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white tracking-tight sm:text-3xl">
               Vendor Studio
             </h1>
-            <span className="inline-flex items-center gap-1 rounded-full bg-cyan-950 px-2.5 py-0.5 text-xs font-semibold text-cyan-400 border border-cyan-800">
+            <span className="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-0.5 text-xs font-semibold text-cyan-700 border border-cyan-200 dark:bg-cyan-950 dark:text-cyan-400 dark:border-cyan-800">
               {seller.displayName}
-              {seller.isTrusted && <BadgeCheck className="h-3.5 w-3.5 text-cyan-300" />}
+              {seller.isTrusted && <BadgeCheck className="h-3.5 w-3.5 text-cyan-500 dark:text-cyan-300" />}
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
             Payout wallet:{' '}
-            <span className="font-mono text-slate-300">{seller.walletAddress}</span> • Base USDC
+            <span className="font-mono text-slate-800 dark:text-slate-300">{seller.walletAddress}</span> • Base USDC
           </p>
         </div>
 
@@ -379,9 +379,9 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               setOnboardingError(null);
               setShowSettingsModal(true);
             }}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2.5 text-xs font-semibold text-slate-300 hover:border-slate-700 hover:text-white transition cursor-pointer"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:text-white transition cursor-pointer"
           >
-            <Settings className="h-4 w-4 text-slate-400" />
+            <Settings className="h-4 w-4 text-slate-500 dark:text-slate-400" />
             <span>Payout Settings</span>
           </button>
           <button
@@ -390,15 +390,15 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               setPayoutStatus(null);
               setShowPayoutModal(true);
             }}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:text-white transition cursor-pointer"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-white transition cursor-pointer"
           >
-            <Wallet className="h-4 w-4 text-cyan-400" />
+            <Wallet className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
             <span>Withdraw USDC</span>
           </button>
           <button
             type="button"
             onClick={() => setShowUploadModal(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition cursor-pointer"
+            className="flex items-center gap-1.5 rounded-xl bg-[#0EA5E9] px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#0284C7] transition cursor-pointer"
           >
             <Upload className="h-4 w-4" />
             <span>Upload Digital Good</span>
@@ -408,63 +408,63 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 tabular-nums">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
             <span>Gross Sales</span>
-            <DollarSign className="h-4 w-4 text-emerald-400" />
+            <DollarSign className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
           </div>
-          <div className="text-2xl font-extrabold text-white">${stats.totalRevenueUSD.toFixed(2)}</div>
-          <p className="text-[11px] text-slate-400 mt-1">{stats.totalSalesCount} paid orders</p>
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-white">${stats.totalRevenueUSD.toFixed(2)}</div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{stats.totalSalesCount} paid orders</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
             <span>Net Earnings (95%)</span>
-            <TrendingUp className="h-4 w-4 text-blue-400" />
+            <TrendingUp className="h-4 w-4 text-blue-500 dark:text-blue-400" />
           </div>
-          <div className="text-2xl font-extrabold text-white">${stats.netEarningsUSD.toFixed(2)}</div>
-          <p className="text-[11px] text-slate-400 mt-1">5% platform fee</p>
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-white">${stats.netEarningsUSD.toFixed(2)}</div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">5% platform fee</p>
         </div>
 
-        <div className="rounded-2xl border border-cyan-800/40 bg-gradient-to-br from-cyan-950/30 to-blue-950/30 p-5">
-          <div className="flex items-center justify-between text-xs text-cyan-300 mb-2">
+        <div className="rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50 to-sky-50 p-5 shadow-sm dark:border-cyan-800/40 dark:from-cyan-950/30 dark:to-blue-950/30">
+          <div className="flex items-center justify-between text-xs text-cyan-700 dark:text-cyan-300 mb-2">
             <span className="font-semibold">Withdrawable Balance</span>
-            <Zap className="h-4 w-4 text-cyan-400" />
+            <Zap className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
           </div>
-          <div className="text-2xl font-extrabold text-cyan-300">${stats.availableBalanceUSD.toFixed(2)}</div>
-          <p className="text-[11px] text-cyan-400/80 mt-1">Min payout: $5.00 USDC</p>
+          <div className="text-2xl font-extrabold text-cyan-800 dark:text-cyan-300">${stats.availableBalanceUSD.toFixed(2)}</div>
+          <p className="text-[11px] text-cyan-700/80 dark:text-cyan-400/80 mt-1">Min payout: $5.00 USDC</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
             <span>My Listings</span>
-            <Package className="h-4 w-4 text-purple-400" />
+            <Package className="h-4 w-4 text-purple-500 dark:text-purple-400" />
           </div>
-          <div className="text-2xl font-extrabold text-white">{vendorProducts.length}</div>
-          <p className="text-[11px] text-slate-400 mt-1">
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-white">{vendorProducts.length}</div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
             {vendorProducts.filter((p) => (p.status || 'published') === 'published').length} published
           </p>
         </div>
       </div>
 
       {/* Vendor Inventory */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-bold text-white flex items-center gap-2">
-            <Package className="h-4 w-4 text-cyan-400" />
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Package className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
             <span>My Digital Inventory ({vendorProducts.length})</span>
           </h2>
           <button
             type="button"
             onClick={() => setShowUploadModal(true)}
-            className="text-xs text-cyan-400 hover:underline cursor-pointer"
+            className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer"
           >
             + Add New
           </button>
         </div>
 
         {vendorProducts.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/50 p-8 text-center text-xs text-slate-400">
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
             You have not published any digital products yet. Click &ldquo;Upload Digital Good&rdquo; to publish your first product.
           </div>
         ) : (

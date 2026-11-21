@@ -25,8 +25,7 @@ import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { SUPPORTED_CRYPTO } from '../utils/nowpaymentsLogic';
 import { ReportProductModal } from '../components/ReportProductModal';
 import type { CryptoCurrency, Product, ProductChangelog, ReviewRecord } from '../types/marketplace';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { API_BASE } from '../utils/apiBase';
 
 export const meta: MetaFunction = ({ params }) => {
   const prod = INITIAL_PRODUCTS.find((p) => p.id === params.id || p.slug === params.id);
@@ -165,19 +164,19 @@ export default function ProductRoute() {
       />
 
       {/* Breadcrumbs */}
-      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400 mb-6">
-        <Link to="/" className="hover:text-cyan-300 transition">
+      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mb-6">
+        <Link to="/" className="hover:text-cyan-600 dark:hover:text-cyan-300 transition">
           Marketplace
         </Link>
-        <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
+        <ChevronRight className="h-3.5 w-3.5 text-slate-400 dark:text-slate-600" />
         <Link
           to={`/?category=${encodeURIComponent(product.category)}`}
-          className="hover:text-cyan-300 transition"
+          className="hover:text-cyan-600 dark:hover:text-cyan-300 transition"
         >
           {product.category}
         </Link>
-        <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
-        <span className="text-slate-200 font-medium truncate max-w-[260px]">{product.title}</span>
+        <ChevronRight className="h-3.5 w-3.5 text-slate-400 dark:text-slate-600" />
+        <span className="text-slate-900 dark:text-slate-200 font-medium truncate max-w-[260px]">{product.title}</span>
       </nav>
 
       {/* Non-published notice for owner/admin preview */}
@@ -256,31 +255,24 @@ export default function ProductRoute() {
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-8">
           {/* Overview */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-            <h2 className="text-base font-bold text-white mb-3">Overview</h2>
-            <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-[#111827]">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white mb-3">Overview</h2>
+            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">
               {product.description}
             </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              {product.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-md bg-slate-800/80 px-2.5 py-1 text-xs font-medium text-slate-300 border border-slate-700/60"
-                >
-                  {tag}
-                </span>
-              ))}
+            <div className="mt-5 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+              {product.tags.join(' · ')}
             </div>
           </section>
 
           {/* Key Features */}
           {product.features && product.features.length > 0 && (
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-              <h2 className="text-base font-bold text-white mb-4">What&apos;s Included</h2>
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-300">
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-[#111827]">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white mb-4">What&apos;s Included</h2>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-700 dark:text-slate-300">
                 {product.features.map((feat, idx) => (
                   <li key={idx} className="flex items-start gap-2.5">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0 mt-0.5" />
                     <span className="leading-relaxed">{feat}</span>
                   </li>
                 ))}
@@ -344,21 +336,21 @@ export default function ProductRoute() {
           )}
 
           {/* Verified Buyer Reviews */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-[#111827]">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
                 <span>Verified Buyer Reviews ({reviews.length})</span>
               </h2>
               {product.reviewsCount > 0 && (
-                <span className="text-xs font-semibold text-amber-300 tabular-nums">
+                <span className="text-xs font-semibold text-amber-600 dark:text-amber-300 tabular-nums">
                   {product.rating.toFixed(2)} / 5.00
                 </span>
               )}
             </div>
 
             {reviews.length === 0 ? (
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 No verified reviews yet. Verified buyers can submit a review directly from My Library after purchase.
               </p>
             ) : (
@@ -366,19 +358,19 @@ export default function ProductRoute() {
                 {reviews.map((rev) => (
                   <div
                     key={rev.id}
-                    className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-4 text-xs"
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs dark:border-slate-800/80 dark:bg-slate-950/60"
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-slate-200">
+                        <span className="font-mono font-semibold text-slate-900 dark:text-slate-200">
                           {rev.reviewerName}
                         </span>
-                        <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300 border border-emerald-500/30">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
                           <CheckCircle2 className="h-3 w-3" />
                           Verified Buyer
                         </span>
                       </div>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
                         {new Date(rev.createdAt).toLocaleDateString()}
                       </span>
                     </div>
@@ -387,12 +379,12 @@ export default function ProductRoute() {
                         <Star
                           key={s}
                           className={`h-3.5 w-3.5 ${
-                            s <= rev.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-700'
+                            s <= rev.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-300 dark:text-slate-700'
                           }`}
                         />
                       ))}
                     </div>
-                    <p className="text-slate-300 leading-relaxed">{rev.comment}</p>
+                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{rev.comment}</p>
                   </div>
                 ))}
               </div>
@@ -402,25 +394,25 @@ export default function ProductRoute() {
 
         {/* Right Sticky Purchase Sidebar */}
         <aside className="lg:col-span-1 lg:sticky lg:top-24 space-y-5">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-xl space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5 dark:border-slate-800 dark:bg-[#111827]">
             <div>
               <div className="flex items-baseline justify-between">
-                <div className="text-3xl font-black text-white tabular-nums">
+                <div className="text-3xl font-black text-slate-950 dark:text-white tabular-nums">
                   ${product.priceUSD}
-                  <span className="text-xs font-normal text-slate-400 ml-1.5">USD</span>
+                  <span className="text-xs font-normal text-slate-500 dark:text-slate-400 ml-1.5">USD</span>
                 </div>
-                <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-300">
+                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                   {product.licenseType}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1.5">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
                 Exact crypto rate and network fee lock on the NOWPayments Hosted Invoice.
               </p>
             </div>
 
             {/* Preferred Crypto Selector */}
             <div>
-              <span className="text-xs font-semibold text-slate-300 block mb-2">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-2">
                 Select Checkout Currency
               </span>
               <div className="grid grid-cols-3 gap-2">
@@ -433,8 +425,8 @@ export default function ProductRoute() {
                       onClick={() => setSelectedCrypto(c.currency)}
                       className={`rounded-xl border px-2.5 py-2 text-left transition cursor-pointer ${
                         active
-                          ? 'border-cyan-500 bg-cyan-950/50 text-white'
-                          : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                          ? 'border-cyan-500 bg-cyan-50 text-cyan-900 dark:bg-cyan-950/50 dark:text-white'
+                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'
                       }`}
                     >
                       <div className="text-xs font-bold">{c.currency}</div>
@@ -450,16 +442,16 @@ export default function ProductRoute() {
               <button
                 type="button"
                 onClick={() => initiateBuy(product, selectedCrypto)}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0EA5E9] py-3 text-sm font-bold text-white shadow-sm hover:bg-[#0284C7] transition cursor-pointer"
               >
-                <Zap className="h-4 w-4 text-cyan-200" />
+                <Zap className="h-4 w-4 text-cyan-100" />
                 <span>Buy Instantly with {selectedCrypto}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => addToCart(product)}
-                className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950 py-2.5 text-xs font-semibold text-slate-300 hover:border-slate-600 hover:text-white transition cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-white transition cursor-pointer"
               >
                 <Bookmark className="h-3.5 w-3.5" />
                 <span>Save for Later</span>
@@ -467,20 +459,20 @@ export default function ProductRoute() {
             </div>
 
             {/* Trust & Delivery Specs */}
-            <div className="border-t border-slate-800 pt-4 space-y-2.5 text-xs text-slate-300">
+            <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
               <div className="flex items-start gap-2.5">
-                <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                <ShieldCheck className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <span>Verified NOWPayments HMAC-SHA512 IPN settlement</span>
               </div>
               {product.deliveryType !== 'license_key' && (
                 <div className="flex items-start gap-2.5">
-                  <Clock className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <Clock className="h-4 w-4 text-cyan-600 dark:text-cyan-400 shrink-0 mt-0.5" />
                   <span>15-minute signed download link (regenerable anytime in My Library)</span>
                 </div>
               )}
               {product.deliveryType !== 'file' && (
                 <div className="flex items-start gap-2.5">
-                  <Key className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                  <Key className="h-4 w-4 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
                   <span>Unique commercial license key with API activation checks</span>
                 </div>
               )}
@@ -488,26 +480,26 @@ export default function ProductRoute() {
           </div>
 
           {/* Creator Card */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 dark:border-slate-800 dark:bg-[#111827]">
             <div className="flex items-center gap-3">
               <div
                 aria-hidden="true"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-xs font-bold text-cyan-300"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 border border-slate-200 text-xs font-bold text-cyan-700 dark:bg-slate-800 dark:border-slate-700 dark:text-cyan-300"
               >
                 {getInitials(product.vendorName)}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-sm text-white truncate">{product.vendorName}</span>
+                  <span className="font-bold text-sm text-slate-900 dark:text-white truncate">{product.vendorName}</span>
                   {product.isTrustedVendor && (
                     <BadgeCheck
-                      className="h-4 w-4 text-cyan-400 shrink-0"
+                      className="h-4 w-4 text-cyan-600 dark:text-cyan-400 shrink-0"
                       aria-label="Verified trusted creator"
                     />
                   )}
                 </div>
-                <span className="text-[11px] text-slate-400">
-                  {product.isTrustedVendor ? 'Verified Trusted Creator' : 'NexusByte Creator'}
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {product.isTrustedVendor ? 'Verified Trusted Creator' : 'ZenxusBay Creator'}
                 </span>
               </div>
             </div>
@@ -515,7 +507,7 @@ export default function ProductRoute() {
             <button
               type="button"
               onClick={() => setShowReportModal(true)}
-              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/70 py-2 text-xs font-medium text-slate-400 hover:border-rose-500/40 hover:text-rose-300 transition cursor-pointer"
+              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 py-2 text-xs font-medium text-slate-600 hover:border-rose-300 hover:text-rose-600 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-400 dark:hover:border-rose-500/40 dark:hover:text-rose-300 transition cursor-pointer"
             >
               <Flag className="h-3.5 w-3.5" />
               <span>Report this product</span>

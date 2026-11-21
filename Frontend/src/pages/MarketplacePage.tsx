@@ -17,6 +17,7 @@ import {
   MARKETPLACE_CATEGORIES,
   type CatalogSortOption,
 } from '../utils/catalogLogic';
+import { getHardenedPriceHandlers } from '../utils/priceInput';
 
 export const MarketplacePage: React.FC = () => {
   const navigate = useNavigate();
@@ -292,7 +293,16 @@ export const MarketplacePage: React.FC = () => {
                       id="price-min-input"
                       type="number"
                       min={0}
+                      step="1"
+                      inputMode="decimal"
                       value={minDraft !== null ? minDraft : String(sliderMinValue)}
+                      {...getHardenedPriceHandlers((cleaned) => {
+                        setMinDraft(cleaned);
+                        const parsed = Number(cleaned);
+                        if (Number.isFinite(parsed) && parsed >= 0) {
+                          updatePriceParam('min', parsed);
+                        }
+                      })}
                       onChange={(e) => {
                         const raw = e.target.value;
                         setMinDraft(raw);
@@ -317,7 +327,16 @@ export const MarketplacePage: React.FC = () => {
                       id="price-max-input"
                       type="number"
                       min={0}
+                      step="1"
+                      inputMode="decimal"
                       value={maxDraft !== null ? maxDraft : String(sliderMaxValue)}
+                      {...getHardenedPriceHandlers((cleaned) => {
+                        setMaxDraft(cleaned);
+                        const parsed = Number(cleaned);
+                        if (Number.isFinite(parsed) && parsed >= 0) {
+                          updatePriceParam('max', parsed);
+                        }
+                      })}
                       onChange={(e) => {
                         const raw = e.target.value;
                         setMaxDraft(raw);

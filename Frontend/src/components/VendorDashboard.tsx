@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Upload,
   DollarSign,
@@ -19,15 +20,22 @@ import {
   Receipt,
   RefreshCw,
   BadgeCheck,
+  LayoutGrid,
+  Globe,
+  CreditCard,
 } from 'lucide-react';
 import type { Product, ProductStatus, VendorStats } from '../types/marketplace';
 import { VendorUploadModal } from './VendorUploadModal';
 import { VendorEditProductModal } from './VendorEditProductModal';
 import { AuthMagicLinkCard } from './AuthMagicLinkCard';
+import { StoreBuilderWorkspace } from './StoreBuilderWorkspace';
+import { StoreDomainsPanel, StoreGatewaySettingsPanel } from './StoreDomainsSettingsPanels';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { API_BASE } from '../utils/apiBase';
+import { isValidCryptoWallet } from '../utils/storefrontLogic';
+import { getHardenedPriceHandlers } from '../utils/priceInput';
 
-const EVM_REGEX = /^0x[a-fA-F0-9]{40}$/;
+type VendorTab = 'builder' | 'products' | 'domains' | 'payouts';
 
 interface VendorDashboardProps {
   products: Product[];
@@ -38,11 +46,16 @@ interface VendorDashboardProps {
 }
 
 const PRODUCT_STATUS_BADGE: Record<ProductStatus, string> = {
-  published: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-  pending_review: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-  rejected: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
-  draft: 'bg-slate-800 text-slate-300 border-slate-700',
-  archived: 'bg-slate-800 text-slate-500 border-slate-700',
+  published:
+    'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30',
+  pending_review:
+    'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30',
+  rejected:
+    'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30',
+  draft:
+    'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+  archived:
+    'bg-slate-100 text-slate-500 border-slate-300 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700',
 };
 
 export const VendorDashboard: React.FC<VendorDashboardProps> = ({
@@ -52,14 +65,34 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   onProductUpdated,
   onViewProduct,
 }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     user,
     seller,
+    vendorStore,
     authToken,
     isAuthLoading,
     completeVendorOnboarding,
+    setIsCreateStoreOpen,
     showToast,
   } = useMarketplace();
+
+  const tabParam = searchParams.get('tab');
+  const activeTab: VendorTab =
+    tabParam === 'builder' ||
+    tabParam === 'domains' ||
+    tabParam === 'payouts' ||
+    tabParam === 'products'
+      ? tabParam
+      : vendorStore
+      ? 'builder'
+      : 'products';
+
+  const setActiveTab = (tab: VendorTab) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    setSearchParams(next, { replace: true });
+  };
 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
@@ -142,8 +175,8 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
       setOnboardingError('Store display name must be at least 2 characters.');
       return;
     }
-    if (!EVM_REGEX.test(trimmedWallet)) {
-      setOnboardingError('Enter a valid Base/EVM USDC wallet address (0x followed by 40 hex chars).');
+    if (!isValidCryptoWallet(trimmedWallet)) {
+      setOnboardingError('Enter a valid crypto wallet (0x..., TON, BTC, SOL, or 0xadmin).');
       return;
     }
 
@@ -320,7 +353,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
             <div>
               <label htmlFor="onboard-wallet" className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                USDC Payout Wallet (Base / EVM 0x...) *
+                USDC Payout Wallet (0x..., TON, BTC, SOL, or &quot;0xadmin&quot;) *
               </label>
               <input
                 id="onboard-wallet"
@@ -328,7 +361,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 required
                 value={walletAddress}
                 onChange={(e) => setWalletAddress(e.target.value)}
-                placeholder="0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+                placeholder="0x742d35Cc6634C0532925a3b844Bc454e4438f44e or 0xadmin"
                 className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 font-mono text-xs text-slate-900 placeholder-slate-400 focus:border-cyan-500 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
               />
             </div>
@@ -373,6 +406,16 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {!vendorStore && (
+            <button
+              type="button"
+              onClick={() => setIsCreateStoreOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-50 px-3.5 py-2.5 text-xs font-bold text-cyan-800 hover:bg-cyan-100 dark:bg-cyan-500/15 dark:text-cyan-300 transition cursor-pointer"
+            >
+              <Store className="h-4 w-4" />
+              <span>+ Create Store</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -404,6 +447,40 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
             <span>Upload Digital Good</span>
           </button>
         </div>
+      </div>
+
+      {/* 4 Studio Tabs */}
+      <div
+        role="tablist"
+        aria-label="Vendor studio sections"
+        className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pb-3 dark:border-slate-800 no-scrollbar"
+      >
+        {[
+          { id: 'builder' as VendorTab, label: 'Storefront Builder', icon: LayoutGrid },
+          { id: 'products' as VendorTab, label: `Products (${vendorProducts.length})`, icon: Package },
+          { id: 'domains' as VendorTab, label: 'Visibility & Domains', icon: Globe },
+          { id: 'payouts' as VendorTab, label: 'Crypto Checkout & Payouts', icon: CreditCard },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveTab(tab.id)}
+              className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+                active
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950'
+                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* KPI Cards */}
@@ -447,7 +524,19 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         </div>
       </div>
 
-      {/* Vendor Inventory */}
+      {/* Tab 1: Storefront Builder */}
+      {activeTab === 'builder' && (
+        <StoreBuilderWorkspace vendorProducts={vendorProducts} />
+      )}
+
+      {/* Tab 3: Visibility & Domains */}
+      {activeTab === 'domains' && <StoreDomainsPanel />}
+
+      {/* Tab 4: Gateway Settings */}
+      {activeTab === 'payouts' && <StoreGatewaySettingsPanel />}
+
+      {/* Vendor Inventory (Tab 2: Products) */}
+      {(activeTab === 'products') && (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -471,7 +560,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs tabular-nums">
               <thead>
-                <tr className="border-b border-slate-800 text-slate-400">
+                <tr className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
                   <th className="pb-3 font-semibold">Product</th>
                   <th className="pb-3 font-semibold">Status</th>
                   <th className="pb-3 font-semibold">Version</th>
@@ -480,16 +569,18 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   <th className="pb-3 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {vendorProducts.map((prod) => {
                   const st = prod.status || 'published';
                   return (
-                    <tr key={prod.id} className="hover:bg-slate-800/30 transition">
-                      <td className="py-3.5 pr-3 font-medium text-white max-w-[260px]">
+                    <tr key={prod.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+                      <td className="py-3.5 pr-3 font-medium text-slate-900 dark:text-white max-w-[260px]">
                         <div className="truncate font-semibold">{prod.title}</div>
-                        <div className="text-[11px] text-slate-400 truncate">{prod.fileInfo.fileName}</div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                          {prod.repoUrl ? prod.repoUrl : prod.fileInfo.fileName}
+                        </div>
                         {st === 'rejected' && prod.rejectionReason && (
-                          <div className="mt-1 text-[11px] text-rose-300">
+                          <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-300">
                             Reason: {prod.rejectionReason}
                           </div>
                         )}
@@ -503,15 +594,15 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                           {st.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="py-3.5 pr-3 font-mono text-cyan-400">{prod.version}</td>
-                      <td className="py-3.5 pr-3 text-slate-300">{prod.salesCount}</td>
-                      <td className="py-3.5 pr-3 font-bold text-white">${prod.priceUSD}</td>
+                      <td className="py-3.5 pr-3 font-mono text-cyan-700 dark:text-cyan-400">{prod.version}</td>
+                      <td className="py-3.5 pr-3 text-slate-700 dark:text-slate-300">{prod.salesCount}</td>
+                      <td className="py-3.5 pr-3 font-bold text-slate-900 dark:text-white">${prod.priceUSD}</td>
                       <td className="py-3.5 text-right whitespace-nowrap space-x-1">
                         <button
                           type="button"
                           onClick={() => onViewProduct(prod)}
                           aria-label={`View ${prod.title}`}
-                          className="rounded p-1.5 text-slate-400 hover:text-white transition cursor-pointer"
+                          className="rounded p-1.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition cursor-pointer"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
@@ -519,7 +610,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                           type="button"
                           onClick={() => setEditTarget(prod)}
                           aria-label={`Edit ${prod.title}`}
-                          className="rounded p-1.5 text-slate-400 hover:text-cyan-300 transition cursor-pointer"
+                          className="rounded p-1.5 text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-300 transition cursor-pointer"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -530,7 +621,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                             setDeleteTarget(prod);
                           }}
                           aria-label={`Delete ${prod.title}`}
-                          className="rounded p-1.5 text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                          className="rounded p-1.5 text-slate-400 hover:text-rose-600 dark:text-slate-500 dark:hover:text-rose-400 transition cursor-pointer"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -543,23 +634,25 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           </div>
         )}
       </div>
+      )}
 
-      {/* Recent Sales */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+      {/* Recent Sales (Products or Payouts tab) */}
+      {(activeTab === 'products' || activeTab === 'payouts') && (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-bold text-white flex items-center gap-2">
-            <Receipt className="h-4 w-4 text-emerald-400" />
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <span>Recent Sales ({stats.recentOrders?.length || 0})</span>
           </h2>
         </div>
 
         {!stats.recentOrders || stats.recentOrders.length === 0 ? (
-          <p className="text-xs text-slate-400">No customer orders recorded yet.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">No customer orders recorded yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs tabular-nums">
               <thead>
-                <tr className="border-b border-slate-800 text-slate-400">
+                <tr className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
                   <th className="pb-3 font-semibold">Date</th>
                   <th className="pb-3 font-semibold">Product</th>
                   <th className="pb-3 font-semibold">Buyer</th>
@@ -568,28 +661,28 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   <th className="pb-3 font-semibold text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {stats.recentOrders.map((ord) => (
-                  <tr key={ord.id} className="hover:bg-slate-800/30 transition">
-                    <td className="py-3 pr-3 text-slate-400">
+                  <tr key={ord.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+                    <td className="py-3 pr-3 text-slate-500 dark:text-slate-400">
                       {new Date(ord.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="py-3 pr-3 font-medium text-white max-w-[200px] truncate">
+                    <td className="py-3 pr-3 font-medium text-slate-900 dark:text-white max-w-[200px] truncate">
                       {ord.productTitle}
                     </td>
-                    <td className="py-3 pr-3 font-mono text-slate-300">{ord.buyerEmailMasked}</td>
-                    <td className="py-3 pr-3 text-slate-300">${ord.totalUSD.toFixed(2)}</td>
-                    <td className="py-3 pr-3 font-bold text-emerald-400">
+                    <td className="py-3 pr-3 font-mono text-slate-700 dark:text-slate-300">{ord.buyerEmailMasked}</td>
+                    <td className="py-3 pr-3 text-slate-700 dark:text-slate-300">${ord.totalUSD.toFixed(2)}</td>
+                    <td className="py-3 pr-3 font-bold text-emerald-600 dark:text-emerald-400">
                       +${ord.sellerShareUSD.toFixed(2)}
                     </td>
                     <td className="py-3 text-right">
                       <span
                         className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
                           ord.status === 'finished'
-                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30'
                             : ord.status === 'partially_paid'
-                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30'
+                            : 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
                         }`}
                       >
                         {ord.status}
@@ -602,23 +695,25 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           </div>
         )}
       </div>
+      )}
 
-      {/* Withdrawal History */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+      {/* Withdrawal History (Payouts tab) */}
+      {activeTab === 'payouts' && (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-bold text-white flex items-center gap-2">
-            <History className="h-4 w-4 text-cyan-400" />
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <History className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
             <span>Withdrawal History ({stats.recentWithdrawals?.length || 0})</span>
           </h2>
         </div>
 
         {!stats.recentWithdrawals || stats.recentWithdrawals.length === 0 ? (
-          <p className="text-xs text-slate-400">No USDC withdrawals requested yet.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">No USDC withdrawals requested yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs tabular-nums">
               <thead>
-                <tr className="border-b border-slate-800 text-slate-400">
+                <tr className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
                   <th className="pb-3 font-semibold">Date</th>
                   <th className="pb-3 font-semibold">Amount</th>
                   <th className="pb-3 font-semibold">Wallet (Base)</th>
@@ -626,26 +721,26 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   <th className="pb-3 font-semibold text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {stats.recentWithdrawals.map((w) => (
-                  <tr key={w.id} className="hover:bg-slate-800/30 transition">
-                    <td className="py-3 pr-3 text-slate-300">
+                  <tr key={w.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+                    <td className="py-3 pr-3 text-slate-700 dark:text-slate-300">
                       {new Date(w.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="py-3 pr-3 font-bold text-white">${w.amountUSD.toFixed(2)} USDC</td>
-                    <td className="py-3 pr-3 font-mono text-slate-400">
+                    <td className="py-3 pr-3 font-bold text-slate-900 dark:text-white">${w.amountUSD.toFixed(2)} USDC</td>
+                    <td className="py-3 pr-3 font-mono text-slate-500 dark:text-slate-400">
                       {w.walletAddress.slice(0, 8)}...{w.walletAddress.slice(-6)}
                     </td>
-                    <td className="py-3 pr-3 font-mono text-cyan-300">{w.batchId || '—'}</td>
+                    <td className="py-3 pr-3 font-mono text-cyan-700 dark:text-cyan-300">{w.batchId || '—'}</td>
                     <td className="py-3 text-right">
                       <div className="inline-flex items-center gap-2">
                         <span
                           className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
                             w.status === 'pending_verification' || w.status === 'creating'
-                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30'
                               : w.status === 'failed'
-                              ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                              : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                              ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30'
                           }`}
                         >
                           {w.status}
@@ -655,7 +750,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                             type="button"
                             onClick={() => handleRetryVerify(w.id)}
                             disabled={retryingWithdrawalId === w.id}
-                            className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-950/40 px-2 py-0.5 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/20 transition cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-50 px-2 py-0.5 text-[10px] font-semibold text-cyan-700 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-500/20 transition cursor-pointer"
                           >
                             <RefreshCw className="h-3 w-3" />
                             <span>Retry Verify</span>
@@ -670,6 +765,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {showUploadModal && (
         <VendorUploadModal
@@ -737,8 +833,10 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   type="number"
                   min="5"
                   step="0.01"
+                  inputMode="decimal"
                   required
                   value={payoutAmount}
+                  {...getHardenedPriceHandlers((cleaned) => setPayoutAmount(Number(cleaned) || 0))}
                   onChange={(e) => setPayoutAmount(Number(e.target.value))}
                   className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white"
                 />

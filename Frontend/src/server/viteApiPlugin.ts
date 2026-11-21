@@ -1,18 +1,23 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import {
+  checkStoreSlugInStore,
   createMarketplaceStore,
   createPaymentInStore,
   createProductInStore,
   createReportInStore,
   createReviewInStore,
+  createStoreInStore,
   deleteProductInStore,
+  findStoreByOwner,
   findTransaction,
   formatAuthUser,
   formatSellerProfile,
+  formatStoreRecord,
   getAdminOverviewFromStore,
   getProductDetailFromStore,
   getPublishedProductsFromStore,
+  getStoreBySlugOrHostInStore,
   getVendorProductsFromStore,
   getVendorStatsFromStore,
   moderateProductInStore,
@@ -24,9 +29,11 @@ import {
   settleTransaction,
   toClientOrder,
   updateProductInStore,
+  updateVendorStoreInStore,
   verifyJwt,
   verifyLicenseKeyInStore,
   verifyMagicTokenInStore,
+  verifyVendorStoreDnsInStore,
   withdrawFromStore,
 } from './marketplaceStore';
 
@@ -130,10 +137,44 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         sendJson(res, 401, { error: 'Unauthorized' });
         return true;
       }
+      const ownedStore = findStoreByOwner(store, auth.user.id);
       sendJson(res, 200, {
         user: formatAuthUser(auth.user),
         seller: auth.seller ? formatSellerProfile(auth.seller) : null,
+        store: ownedStore ? formatStoreRecord(ownedStore) : null,
       });
+      return true;
+    }
+
+    // 3b. Store Builder Public & Authenticated APIs
+    if (pathname === '/api/stores/check-slug' && method === 'GET') {
+      const slug = parsedUrl.searchParams.get('slug') || '';
+      const auth = authenticateRequest(req);
+      sendJson(res, 200, checkStoreSlugInStore(store, slug, auth?.user.id));
+      return true;
+    }
+
+    if (pathname === '/api/stores' && method === 'POST') {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized: sign in first' });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const result = createStoreInStore(
+        store,
+        auth.user.id,
+        body as Parameters<typeof createStoreInStore>[2]
+      );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    if (pathname.startsWith('/api/stores/') && method === 'GET') {
+      const slugOrHost = decodeURIComponent(pathname.replace('/api/stores/', ''));
+      const auth = authenticateRequest(req);
+      const result = getStoreBySlugOrHostInStore(store, slugOrHost, auth?.user.id);
+      sendJson(res, result.status, result.body);
       return true;
     }
 
@@ -433,6 +474,45 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         return true;
       }
       sendJson(res, 200, { products: getVendorProductsFromStore(store, auth.seller.id) });
+      return true;
+    }
+
+    // 13c. Vendor Storefront Builder & Visibility/Domain Controls
+    if (pathname === '/api/vendor/store' && method === 'GET') {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      const ownedStore = findStoreByOwner(store, auth.user.id);
+      sendJson(res, 200, { store: ownedStore ? formatStoreRecord(ownedStore) : null });
+      return true;
+    }
+
+    if (pathname === '/api/vendor/store' && method === 'PATCH') {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const result = updateVendorStoreInStore(
+        store,
+        auth.user.id,
+        body as Parameters<typeof updateVendorStoreInStore>[2]
+      );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    if (pathname === '/api/vendor/store/verify-dns' && method === 'POST') {
+      const auth = authenticateRequest(req);
+      if (!auth) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+      }
+      const result = verifyVendorStoreDnsInStore(store, auth.user.id);
+      sendJson(res, result.status, result.body);
       return true;
     }
 

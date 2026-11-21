@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
-import { X, Pencil, FileArchive, Loader2 } from 'lucide-react';
-import type { Product, ProductCategory, DeliveryType } from '../types/marketplace';
+import { X, Pencil, FileArchive, Loader2, Plus, Trash2 } from 'lucide-react';
+import type {
+  Product,
+  ProductCategory,
+  DeliveryType,
+  ProductLicenseTier,
+} from '../types/marketplace';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { API_BASE } from '../utils/apiBase';
+import { getHardenedPriceHandlers } from '../utils/priceInput';
 
 const BANNER_GRADIENTS = [
   { label: 'Cyan / Indigo', value: 'from-cyan-600 via-blue-600 to-indigo-700' },
@@ -44,6 +50,10 @@ export const VendorEditProductModal: React.FC<VendorEditProductModalProps> = ({
     product.codeSnippetPreview?.filename || ''
   );
   const [snippetCode, setSnippetCode] = useState(product.codeSnippetPreview?.code || '');
+  const [demoUrl, setDemoUrl] = useState(product.demoUrl || '');
+  const [repoUrl, setRepoUrl] = useState(product.repoUrl || '');
+  const [previewMediaUrl, setPreviewMediaUrl] = useState(product.previewMediaUrl || '');
+  const [licenseTiers, setLicenseTiers] = useState<ProductLicenseTier[]>(product.licenseTiers || []);
   const [newFile, setNewFile] = useState<File | null>(null);
   const [progressMsg, setProgressMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -114,6 +124,10 @@ export const VendorEditProductModal: React.FC<VendorEditProductModalProps> = ({
           .filter(Boolean),
         changelogNote: changelogNote.trim() || undefined,
         notifyBuyers,
+        demoUrl: demoUrl.trim() || '',
+        repoUrl: repoUrl.trim() || '',
+        previewMediaUrl: previewMediaUrl.trim() || '',
+        licenseTiers: licenseTiers.filter((t) => t.name.trim() && t.priceUSD > 0),
         codeSnippet: snippetCode.trim()
           ? {
               language: snippetLanguage.trim() || 'typescript',
@@ -281,8 +295,10 @@ export const VendorEditProductModal: React.FC<VendorEditProductModalProps> = ({
                 type="number"
                 min="1"
                 step="0.01"
+                inputMode="decimal"
                 required
                 value={priceUSD}
+                {...getHardenedPriceHandlers((cleaned) => setPriceUSD(Number(cleaned) || 0))}
                 onChange={(e) => setPriceUSD(Number(e.target.value))}
                 className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
               />
@@ -384,9 +400,114 @@ export const VendorEditProductModal: React.FC<VendorEditProductModalProps> = ({
             </div>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label htmlFor="edit-demo-url" className="text-slate-300 font-semibold block mb-1">
+                Live Demo URL
+              </label>
+              <input
+                id="edit-demo-url"
+                type="url"
+                value={demoUrl}
+                onChange={(e) => setDemoUrl(e.target.value)}
+                placeholder="https://demo.yourapp.dev"
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-repo-url" className="text-slate-300 font-semibold block mb-1">
+                Private GitHub Repo
+              </label>
+              <input
+                id="edit-repo-url"
+                type="url"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                placeholder="https://github.com/org/repo"
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-media-url" className="text-slate-300 font-semibold block mb-1">
+                Cover Media URL
+              </label>
+              <input
+                id="edit-media-url"
+                type="url"
+                value={previewMediaUrl}
+                onChange={(e) => setPreviewMediaUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white"
+              />
+            </div>
+          </div>
+
+          {/* License Tiers */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-300">License Tiers</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setLicenseTiers((prev) => [
+                    ...prev,
+                    {
+                      id: `tier_${Date.now()}_${prev.length}`,
+                      name: prev.length === 0 ? 'Personal' : 'Commercial',
+                      priceUSD: prev.length === 0 ? priceUSD : Math.round(priceUSD * 2),
+                    },
+                  ])
+                }
+                className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-cyan-300 hover:bg-slate-700 cursor-pointer"
+              >
+                <Plus className="h-3 w-3" /> Add Tier
+              </button>
+            </div>
+            {licenseTiers.map((tier, idx) => (
+              <div key={tier.id} className="grid grid-cols-12 gap-2 items-center">
+                <input
+                  type="text"
+                  value={tier.name}
+                  onChange={(e) =>
+                    setLicenseTiers((prev) =>
+                      prev.map((t, i) => (i === idx ? { ...t, name: e.target.value } : t))
+                    )
+                  }
+                  className="col-span-6 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-white"
+                />
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={tier.priceUSD}
+                  {...getHardenedPriceHandlers((cleaned) =>
+                    setLicenseTiers((prev) =>
+                      prev.map((t, i) => (i === idx ? { ...t, priceUSD: Number(cleaned) || 0 } : t))
+                    )
+                  )}
+                  onChange={(e) =>
+                    setLicenseTiers((prev) =>
+                      prev.map((t, i) => (i === idx ? { ...t, priceUSD: Number(e.target.value) } : t))
+                    )
+                  }
+                  className="col-span-4 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 font-mono text-white"
+                />
+                <button
+                  type="button"
+                  aria-label={`Remove tier ${tier.name}`}
+                  onClick={() => setLicenseTiers((prev) => prev.filter((_, i) => i !== idx))}
+                  className="col-span-2 flex justify-center rounded-lg p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div>
             <label htmlFor="edit-description" className="text-slate-300 font-semibold block mb-1">
-              Description
+              Description (Markdown supported)
             </label>
             <textarea
               id="edit-description"

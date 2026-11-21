@@ -1,8 +1,15 @@
 import React, { useState } from 'react';
-import { X, Upload, FileArchive, ShieldAlert } from 'lucide-react';
-import type { ProductCategory, DeliveryType, LicenseType, Product } from '../types/marketplace';
+import { X, Upload, FileArchive, ShieldAlert, Plus, Trash2, ShieldCheck } from 'lucide-react';
+import type {
+  ProductCategory,
+  DeliveryType,
+  LicenseType,
+  Product,
+  ProductLicenseTier,
+} from '../types/marketplace';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { API_BASE } from '../utils/apiBase';
+import { getHardenedPriceHandlers } from '../utils/priceInput';
 
 const BANNER_GRADIENTS = [
   { label: 'Cyan / Indigo', value: 'from-cyan-600 via-blue-600 to-indigo-700' },
@@ -38,6 +45,10 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
   const [snippetLanguage, setSnippetLanguage] = useState('typescript');
   const [snippetFilename, setSnippetFilename] = useState('');
   const [snippetCode, setSnippetCode] = useState('');
+  const [demoUrl, setDemoUrl] = useState('');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [previewMediaUrl, setPreviewMediaUrl] = useState('');
+  const [licenseTiers, setLicenseTiers] = useState<ProductLicenseTier[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -58,8 +69,8 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
       setErrorMsg('Authenticated vendor session required.');
       return;
     }
-    if (!selectedFile) {
-      setErrorMsg('Please attach a digital product file (.zip, .tar.gz, .pdf, etc.).');
+    if (!selectedFile && !repoUrl.trim()) {
+      setErrorMsg('Attach a digital archive (.zip, .tar.gz, .pdf) OR provide a private GitHub repository URL.');
       return;
     }
     if (!title.trim() || priceUSD <= 0) {
@@ -79,36 +90,42 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
     try {
       setIsSubmitting(true);
 
-      // 1. Request presigned Backblaze B2 PUT upload URL
-      setUploadProgress('1/3 Requesting Backblaze B2 upload link...');
-      const urlRes = await fetch(`${API_BASE}/api/upload-url`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({ fileName: selectedFile.name }),
-      });
+      let uploadedFileKey = '';
+      let fileSizeStr = 'GitHub Repo';
 
-      const urlData = await urlRes.json();
-      if (!urlRes.ok || !urlData.uploadUrl || !urlData.fileKey) {
-        throw new Error(urlData.error || 'Failed to get Backblaze B2 upload URL');
-      }
+      if (selectedFile) {
+        // 1. Request presigned Backblaze B2 PUT upload URL
+        setUploadProgress('1/3 Requesting Backblaze B2 upload link...');
+        const urlRes = await fetch(`${API_BASE}/api/upload-url`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ fileName: selectedFile.name }),
+        });
 
-      // 2. Upload file directly to Backblaze B2
-      setUploadProgress(`2/3 Uploading ${selectedFile.name} to Backblaze B2...`);
-      const putRes = await fetch(urlData.uploadUrl, {
-        method: 'PUT',
-        body: selectedFile,
-      });
+        const urlData = await urlRes.json();
+        if (!urlRes.ok || !urlData.uploadUrl || !urlData.fileKey) {
+          throw new Error(urlData.error || 'Failed to get Backblaze B2 upload URL');
+        }
 
-      if (!putRes.ok) {
-        throw new Error(`Backblaze B2 rejected upload (HTTP ${putRes.status}). Check B2 CORS settings.`);
+        // 2. Upload file directly to Backblaze B2
+        setUploadProgress(`2/3 Scanning & uploading ${selectedFile.name} to Backblaze B2...`);
+        const putRes = await fetch(urlData.uploadUrl, {
+          method: 'PUT',
+          body: selectedFile,
+        });
+
+        if (!putRes.ok) {
+          throw new Error(`Backblaze B2 rejected upload (HTTP ${putRes.status}). Check B2 CORS settings.`);
+        }
+        uploadedFileKey = urlData.fileKey;
+        fileSizeStr = formatBytes(selectedFile.size);
       }
 
       // 3. Persist product metadata in D1
-      setUploadProgress('3/3 Verifying file & saving product...');
-      const fileSizeStr = formatBytes(selectedFile.size);
+      setUploadProgress('3/3 Verifying package & saving product...');
       const createRes = await fetch(`${API_BASE}/api/products`, {
         method: 'POST',
         headers: {
@@ -123,10 +140,14 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
           category,
           deliveryType,
           version: version.trim() || 'v1.0.0',
-          b2_file_key: urlData.fileKey,
-          fileName: selectedFile.name,
+          b2_file_key: uploadedFileKey || undefined,
+          fileName: selectedFile?.name || 'github-repo-access.txt',
           fileSize: fileSizeStr,
           bannerGradient,
+          demoUrl: demoUrl.trim() || undefined,
+          repoUrl: repoUrl.trim() || undefined,
+          previewMediaUrl: previewMediaUrl.trim() || undefined,
+          licenseTiers: licenseTiers.filter((t) => t.name.trim() && t.priceUSD > 0),
           tags: parsedTags,
           features: parsedFeatures,
           changelogNote: changelogNote.trim() || 'Initial release',
@@ -158,9 +179,9 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
         version: version.trim() || 'v1.0.0',
         status: createData.status || (isAutoPublished ? 'published' : 'pending_review'),
         fileInfo: {
-          fileName: selectedFile.name,
-          fileSize: createData.fileSize || fileSizeStr,
-          format: 'Archive',
+          fileName: selectedFile?.name || 'github-repo-access.txt',
+          fileSize: createData.fileSize || 'GitHub Repo',
+          format: repoUrl.trim() && !selectedFile ? 'GitHub Repo' : 'Archive',
         },
         vendorId: seller.id,
         vendorName: seller.displayName,
@@ -245,11 +266,16 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
             </div>
           )}
 
-          {/* File Selector */}
+          {/* File Selector or GitHub Repo */}
           <div>
-            <label htmlFor="vendor-file-input" className="text-slate-300 font-semibold block mb-1">
-              Digital Product File * (max 500 MB)
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="vendor-file-input" className="text-slate-300 font-semibold">
+                Digital Product Archive (.zip / .tar.gz / .pdf — max 500 MB)
+              </label>
+              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400">
+                <ShieldCheck className="h-3.5 w-3.5" /> Auto Malware Check
+              </span>
+            </div>
             <label
               htmlFor="vendor-file-input"
               className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-cyan-500/40 bg-slate-950 px-4 py-3 hover:border-cyan-400 transition"
@@ -259,7 +285,7 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
                 <span className="text-slate-200">
                   {selectedFile
                     ? `${selectedFile.name} (${formatBytes(selectedFile.size)})`
-                    : 'Click to select .zip / .tar.gz / .pdf file'}
+                    : 'Click to select archive (or link a private GitHub repo below)'}
                 </span>
               </div>
               <input
@@ -333,8 +359,10 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
                 type="number"
                 min="1"
                 step="0.01"
+                inputMode="decimal"
                 required
                 value={priceUSD}
+                {...getHardenedPriceHandlers((cleaned) => setPriceUSD(Number(cleaned) || 0))}
                 onChange={(e) => setPriceUSD(Number(e.target.value))}
                 className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
               />
@@ -429,16 +457,124 @@ export const VendorUploadModal: React.FC<VendorUploadModalProps> = ({
             />
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label htmlFor="upload-demo-url" className="text-slate-300 font-semibold block mb-1">
+                Live Demo URL
+              </label>
+              <input
+                id="upload-demo-url"
+                type="url"
+                value={demoUrl}
+                onChange={(e) => setDemoUrl(e.target.value)}
+                placeholder="https://demo.yourapp.dev"
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label htmlFor="upload-repo-url" className="text-slate-300 font-semibold block mb-1">
+                Private GitHub Repo
+              </label>
+              <input
+                id="upload-repo-url"
+                type="url"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                placeholder="https://github.com/org/repo"
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label htmlFor="upload-media-url" className="text-slate-300 font-semibold block mb-1">
+                Cover Image / Media URL
+              </label>
+              <input
+                id="upload-media-url"
+                type="url"
+                value={previewMediaUrl}
+                onChange={(e) => setPreviewMediaUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Multi-Tier License Pricing */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-300">
+                License Tiers (Optional — e.g. Personal vs Commercial)
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setLicenseTiers((prev) => [
+                    ...prev,
+                    {
+                      id: `tier_${Date.now()}_${prev.length}`,
+                      name: prev.length === 0 ? 'Personal' : 'Commercial',
+                      priceUSD: prev.length === 0 ? priceUSD : Math.round(priceUSD * 2),
+                    },
+                  ])
+                }
+                className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-cyan-300 hover:bg-slate-700 cursor-pointer"
+              >
+                <Plus className="h-3 w-3" /> Add Tier
+              </button>
+            </div>
+            {licenseTiers.map((tier, idx) => (
+              <div key={tier.id} className="grid grid-cols-12 gap-2 items-center">
+                <input
+                  type="text"
+                  value={tier.name}
+                  placeholder="Tier name"
+                  onChange={(e) =>
+                    setLicenseTiers((prev) =>
+                      prev.map((t, i) => (i === idx ? { ...t, name: e.target.value } : t))
+                    )
+                  }
+                  className="col-span-6 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-white"
+                />
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={tier.priceUSD}
+                  {...getHardenedPriceHandlers((cleaned) =>
+                    setLicenseTiers((prev) =>
+                      prev.map((t, i) => (i === idx ? { ...t, priceUSD: Number(cleaned) || 0 } : t))
+                    )
+                  )}
+                  onChange={(e) =>
+                    setLicenseTiers((prev) =>
+                      prev.map((t, i) => (i === idx ? { ...t, priceUSD: Number(e.target.value) } : t))
+                    )
+                  }
+                  className="col-span-4 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 font-mono text-white"
+                />
+                <button
+                  type="button"
+                  aria-label={`Remove tier ${tier.name}`}
+                  onClick={() => setLicenseTiers((prev) => prev.filter((_, i) => i !== idx))}
+                  className="col-span-2 flex justify-center rounded-lg p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div>
             <label htmlFor="upload-description" className="text-slate-300 font-semibold block mb-1">
-              Description
+              Description (supports Markdown)
             </label>
             <textarea
               id="upload-description"
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe what's inside the archive..."
+              placeholder="### Features&#10;- Built with TypeScript..."
               className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none"
             />
           </div>

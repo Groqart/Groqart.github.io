@@ -81,6 +81,13 @@ export interface ProductChangelog {
   changes: string[];
 }
 
+export interface ProductLicenseTier {
+  id: string;
+  name: string;
+  priceUSD: number;
+  description?: string;
+}
+
 export interface Product {
   id: string;
   title: string;
@@ -95,6 +102,13 @@ export interface Product {
   status?: ProductStatus;
   rejectionReason?: string;
   b2FileKey?: string;
+  storeId?: string;
+  storeSlug?: string;
+  demoUrl?: string;
+  repoUrl?: string;
+  previewMediaUrl?: string;
+  licenseTiers?: ProductLicenseTier[];
+  virusScanStatus?: 'clean' | 'pending' | 'flagged';
   fileInfo: {
     fileName: string;
     fileSize: string;
@@ -120,6 +134,64 @@ export interface Product {
   };
   downloadContentSample: string;
   createdAt: string;
+}
+
+export type StoreTemplateId = 'minimal_grid' | 'featured_hero' | 'developer_portfolio';
+
+export type StoreSectionId = 'hero' | 'featured' | 'catalog' | 'about' | 'socials';
+
+export type PaymentGatewayId = 'nowpayments' | 'cryptomus' | 'walletconnect';
+
+export interface StoreSectionConfig {
+  id: StoreSectionId;
+  label: string;
+  enabled: boolean;
+}
+
+export interface StoreThemeConfig {
+  template: StoreTemplateId;
+  logoUrl: string;
+  faviconUrl: string;
+  accentColor: string;
+  defaultTheme: 'light' | 'dark';
+  heroTitle: string;
+  heroSubtitle: string;
+  heroCtaLabel: string;
+  heroMediaType: 'gradient' | 'image' | 'video';
+  heroMediaUrl: string;
+  featuredProductIds: string[];
+  aboutMarkdown: string;
+  socials: {
+    github: string;
+    telegram: string;
+    twitter: string;
+    discord: string;
+    contactEmail: string;
+  };
+  sections: StoreSectionConfig[];
+}
+
+export interface StorePaymentConfig {
+  gateway: PaymentGatewayId;
+  walletAddress: string;
+  apiKeyMasked: string;
+  hasApiKey: boolean;
+  preferredCurrency: 'USDT' | 'BTC' | 'ETH' | 'SOL' | 'TON';
+}
+
+export interface StoreRecord {
+  id: string;
+  ownerId: string;
+  name: string;
+  slug: string;
+  customDomain: string | null;
+  dnsVerified: boolean;
+  sslStatus: 'none' | 'pending' | 'active';
+  isPublicInFeed: boolean;
+  themeConfig: StoreThemeConfig;
+  paymentConfig: StorePaymentConfig;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ReviewRecord {

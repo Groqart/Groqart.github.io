@@ -18,9 +18,27 @@ CREATE TABLE IF NOT EXISTS sellers (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS stores (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  custom_domain TEXT UNIQUE,
+  dns_verified INTEGER NOT NULL DEFAULT 0,
+  ssl_status TEXT NOT NULL DEFAULT 'none' CHECK (ssl_status IN ('none', 'pending', 'active')),
+  is_public_in_feed INTEGER NOT NULL DEFAULT 1,
+  theme_config TEXT NOT NULL DEFAULT '{}',
+  gateway TEXT NOT NULL DEFAULT 'nowpayments',
+  wallet_address TEXT NOT NULL,
+  preferred_currency TEXT NOT NULL DEFAULT 'USDT',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY,
   seller_id TEXT NOT NULL REFERENCES sellers(id),
+  store_id TEXT REFERENCES stores(id),
   title TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
   price_cents INTEGER NOT NULL,
@@ -33,6 +51,11 @@ CREATE TABLE IF NOT EXISTS products (
   version TEXT NOT NULL DEFAULT 'v1.0.0',
   delivery_type TEXT NOT NULL DEFAULT 'both',
   digital_content TEXT,
+  demo_url TEXT,
+  repo_url TEXT,
+  preview_media_url TEXT,
+  license_tiers_json TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
   tags_json TEXT NOT NULL DEFAULT '[]',
   features_json TEXT NOT NULL DEFAULT '[]',
   banner_gradient TEXT NOT NULL DEFAULT 'from-cyan-600 via-blue-600 to-indigo-700',
@@ -57,11 +80,14 @@ CREATE TABLE IF NOT EXISTS transactions (
   access_token TEXT NOT NULL,
   product_id TEXT NOT NULL REFERENCES products(id),
   seller_id TEXT NOT NULL REFERENCES sellers(id),
+  store_id TEXT REFERENCES stores(id),
+  buyer_id TEXT REFERENCES users(id),
   buyer_email TEXT NOT NULL,
   total_cents INTEGER NOT NULL,
   seller_share_cents INTEGER NOT NULL,
   platform_share_cents INTEGER NOT NULL,
   pay_currency TEXT,
+  tx_hash TEXT,
   status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'confirming', 'confirmed', 'sending', 'partially_paid', 'finished', 'expired', 'failed')),
   license_key TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -119,11 +145,16 @@ CREATE TABLE IF NOT EXISTS magic_tokens (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_stores_owner_id ON stores(owner_id);
+CREATE INDEX IF NOT EXISTS idx_stores_slug ON stores(slug);
+CREATE INDEX IF NOT EXISTS idx_stores_custom_domain ON stores(custom_domain);
 CREATE INDEX IF NOT EXISTS idx_products_seller_id ON products(seller_id);
+CREATE INDEX IF NOT EXISTS idx_products_store_id ON products(store_id);
 CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
 CREATE INDEX IF NOT EXISTS idx_product_changelog_product_id ON product_changelog(product_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_buyer_email ON transactions(buyer_email);
 CREATE INDEX IF NOT EXISTS idx_transactions_seller_id ON transactions(seller_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_store_id ON transactions(store_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_order_id ON transactions(order_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_product_id ON transactions(product_id);
 CREATE INDEX IF NOT EXISTS idx_license_keys_product_key ON license_keys(product_id, license_key);

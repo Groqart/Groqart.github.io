@@ -1,13 +1,17 @@
 import React from 'react';
-import { Outlet, Link } from 'react-router';
+import { Outlet, Link, useLocation } from 'react-router';
 import { CheckCircle } from 'lucide-react';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
 import { CartDrawer } from './CartDrawer';
 import { CheckoutModal } from './CheckoutModal';
+import { CreateStoreModal } from './CreateStoreModal';
 import { useMarketplace } from '../context/MarketplaceContext';
+import { detectStorefrontContext } from '../utils/storefrontLogic';
+import StorefrontRoute from '../routes/storefront';
 
 export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
   const {
     orders,
     cart,
@@ -17,8 +21,10 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
     currentRole,
     toastMessage,
     user,
+    vendorStore,
     setIsCartOpen,
     setIsSidebarOpen,
+    setIsCreateStoreOpen,
     toggleSidebar,
     setThemePreference,
     setCurrentRole,
@@ -31,6 +37,43 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
   const paidOrdersCount = orders.filter((o) => o.status === 'paid').length;
   const isAdmin = user?.role === 'admin';
 
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const storefrontCtx = detectStorefrontContext(hostname, location.pathname);
+  const isStandaloneStore = storefrontCtx.mode === 'standalone';
+
+  // Mode B: Isolated Merchant Storefront (strips ZenxusBay Navbar, Sidebar, Logo, Global Search)
+  if (isStandaloneStore) {
+    return (
+      <div className="min-h-screen flex flex-col font-sans">
+        {toastMessage && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-white px-4 py-3 text-xs font-semibold text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white"
+          >
+            <CheckCircle className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        <main className="flex-1 min-w-0">
+          {storefrontCtx.isHostBased && location.pathname === '/' ? (
+            <StorefrontRoute
+              overrideSlugOrHost={storefrontCtx.slugOrHost}
+              overrideMode="standalone"
+            />
+          ) : (
+            children || <Outlet />
+          )}
+        </main>
+
+        <CheckoutModal />
+        <CreateStoreModal />
+      </div>
+    );
+  }
+
+  // Mode A / Standard ZenxusBay Marketplace Shell
   return (
     <div className="min-h-screen bg-[#F7F9FC] text-slate-900 dark:bg-[#090D16] dark:text-slate-100 flex flex-col font-sans">
       {/* Toast Alert */}
@@ -57,6 +100,8 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
         setCurrentRole={setCurrentRole}
         purchasesCount={paidOrdersCount}
         user={user}
+        vendorStoreSlug={vendorStore?.slug || null}
+        onOpenCreateStore={() => setIsCreateStoreOpen(true)}
         onLogout={logout}
       />
 
@@ -66,6 +111,8 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
           isOpen={isSidebarOpen}
           onCloseMobile={() => setIsSidebarOpen(false)}
           onOpenSaved={() => setIsCartOpen(true)}
+          onOpenCreateStore={() => setIsCreateStoreOpen(true)}
+          vendorStoreSlug={vendorStore?.slug || null}
           savedCount={cart.length}
           purchasesCount={paidOrdersCount}
           isAdmin={isAdmin}
@@ -80,7 +127,10 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
           <footer className="border-t border-slate-200 bg-white py-6 px-4 text-xs text-slate-500 dark:border-slate-800/80 dark:bg-[#0B101B] dark:text-slate-400">
             <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-slate-800 dark:text-slate-200">
+                <span
+                  translate="no"
+                  className="notranslate font-display font-bold text-slate-800 dark:text-slate-200"
+                >
                   ZenxusBay
                 </span>
                 <span>&copy; {new Date().getFullYear()} · Digital Goods &amp; Crypto Checkout</span>
@@ -101,6 +151,9 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
           </footer>
         </div>
       </div>
+
+      {/* Create Store Wizard */}
+      <CreateStoreModal />
 
       {/* Checkout Modal */}
       <CheckoutModal />

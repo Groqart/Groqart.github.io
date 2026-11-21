@@ -15,14 +15,17 @@ import {
   Palette,
   Webhook,
   X,
+  Plus,
+  ExternalLink,
 } from 'lucide-react';
 import type { ProductCategory } from '../types/marketplace';
-import { useMarketplace } from '../context/MarketplaceContext';
 
 interface SidebarProps {
   isOpen: boolean;
   onCloseMobile: () => void;
   onOpenSaved: () => void;
+  onOpenCreateStore: () => void;
+  vendorStoreSlug?: string | null;
   savedCount: number;
   purchasesCount: number;
   isAdmin: boolean;
@@ -41,6 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onCloseMobile,
   onOpenSaved,
+  onOpenCreateStore,
+  vendorStoreSlug,
   savedCount,
   purchasesCount,
   isAdmin,
@@ -214,6 +219,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Store className="h-4 w-4 shrink-0" />
               <span>Vendor Portal</span>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenCreateStore();
+                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                  onCloseMobile();
+                }
+              }}
+              className="w-full flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-cyan-700 bg-cyan-50/90 hover:bg-cyan-100 border border-cyan-200/80 dark:text-cyan-300 dark:bg-cyan-500/10 dark:border-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              <span>Create Store</span>
+            </button>
+            {vendorStoreSlug && (
+              <button
+                type="button"
+                onClick={() => goToRoute(`/@${vendorStoreSlug}`)}
+                className={navItemClass(currentPath === `/@${vendorStoreSlug}`)}
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" />
+                <span className="truncate">@{vendorStoreSlug}</span>
+              </button>
+            )}
             {isAdmin && (
               <button
                 type="button"
@@ -302,6 +330,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <Store className="h-5 w-5" />
             <span>Vendor</span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenCreateStore}
+            className="w-full flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold text-cyan-700 bg-cyan-50 hover:bg-cyan-100 dark:text-cyan-300 dark:bg-cyan-500/15 dark:hover:bg-cyan-500/25 transition cursor-pointer"
+            title="+ Create Store"
+          >
+            <Plus className="h-4 w-4" />
+            <span>+ Store</span>
           </button>
         </div>
       </aside>

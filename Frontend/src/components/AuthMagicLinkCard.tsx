@@ -99,16 +99,16 @@ export const AuthMagicLinkCard: React.FC<AuthMagicLinkCardProps> = ({
           <div>
             <label htmlFor="magic-link-email" className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               <Mail className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              Email Address
+              Email or Test Login (&quot;admin&quot;)
             </label>
             <input
               id="magic-link-email"
-              type="email"
+              type="text"
               required
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder="you@example.com or admin"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-cyan-500 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500"
             />
           </div>

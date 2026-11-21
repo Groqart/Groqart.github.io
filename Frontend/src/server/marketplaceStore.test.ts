@@ -1,15 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  checkStoreSlugInStore,
   createMarketplaceStore,
   createPaymentInStore,
   createProductInStore,
   createReportInStore,
   createReviewInStore,
+  createStoreInStore,
   deleteProductInStore,
   getAdminOverviewFromStore,
   getProductDetailFromStore,
   getPublishedProductsFromStore,
+  getStoreBySlugOrHostInStore,
   getVendorProductsFromStore,
   getVendorStatsFromStore,
   maskEmail,
@@ -23,9 +26,11 @@ import {
   signJwt,
   toClientOrder,
   updateProductInStore,
+  updateVendorStoreInStore,
   verifyJwt,
   verifyLicenseKeyInStore,
   verifyMagicTokenInStore,
+  verifyVendorStoreDnsInStore,
   withdrawFromStore,
 } from './marketplaceStore';
 
@@ -406,3 +411,75 @@ test('intermediate IPN statuses, idempotent withdrawals with retry-verify, and m
   assert.equal(createFail.status, 502);
   assert.equal(getVendorStatsFromStore(store, seller).availableBalanceUSD, 45);
 });
+
+test('admin login shortcut, 0xadmin wallet, store builder wizard, visibility isolation, DNS verification, and tiered checkout', () => {
+  const store = createMarketplaceStore();
+
+  // Admin test login shortcut ("admin" -> admin@nexusbyte.io)
+  const adminReq = requestMagicLinkInStore(store, 'admin', '/vendor?tab=builder');
+  assert.equal(adminReq.status, 200);
+  const adminVerify = verifyMagicTokenInStore(store, adminReq.rawToken!, TEST_SECRET);
+  assert.equal(adminVerify.status, 200);
+  const adminUser = adminVerify.body.user as { id: string; role: string };
+  assert.equal(adminUser.role, 'admin');
+
+  // Slug availability check
+  assert.equal(checkStoreSlugInStore(store, 'cybercode').available, true);
+  assert.equal(checkStoreSlugInStore(store, 'admin').available, false);
+
+  // Create store with 0xadmin wallet shortcut
+  const createdStore = createStoreInStore(store, adminUser.id, {
+    name: 'CyberCode',
+    slug: 'cybercode',
+    template: 'featured_hero',
+    walletAddress: '0xadmin',
+    gateway: 'cryptomus',
+  });
+  assert.equal(createdStore.status, 201);
+
+  const seller = store.sellers.get(adminUser.id)!;
+  const repoProd = createProductInStore(store, seller, {
+    title: 'Private Repo Agent',
+    priceUSD: 29,
+    repoUrl: 'https://github.com/cybercode/agent-private',
+    demoUrl: 'https://demo.cybercode.dev',
+    licenseTiers: [
+      { id: 'personal', name: 'Personal License', priceUSD: 29 },
+      { id: 'commercial', name: 'Commercial License', priceUSD: 99 },
+    ],
+  });
+  assert.equal(repoProd.status, 201);
+  const prodId = String(repoProd.body.id);
+
+  // Initially visible in ZenxusBay global catalog
+  assert.equal(getPublishedProductsFromStore(store).some((p) => p.id === prodId), true);
+
+  // Turning isPublicInFeed Off hides product from global catalog while keeping store route live
+  const hideRes = updateVendorStoreInStore(store, adminUser.id, { isPublicInFeed: false });
+  assert.equal(hideRes.status, 200);
+  assert.equal(getPublishedProductsFromStore(store).some((p) => p.id === prodId), false);
+
+  const storeView = getStoreBySlugOrHostInStore(store, 'cybercode');
+  assert.equal(storeView.status, 200);
+  assert.equal((storeView.body.products as Array<{ id: string }>).some((p) => p.id === prodId), true);
+
+  // Custom domain DNS verification + host resolution
+  updateVendorStoreInStore(store, adminUser.id, { customDomain: 'cybercode.dev' });
+  const dnsRes = verifyVendorStoreDnsInStore(store, adminUser.id);
+  assert.equal(dnsRes.status, 200);
+  assert.equal(dnsRes.body.dnsVerified, true);
+  assert.equal(dnsRes.body.sslStatus, 'active');
+
+  const hostView = getStoreBySlugOrHostInStore(store, 'cybercode.dev');
+  assert.equal(hostView.status, 200);
+
+  // Tiered license checkout computes exact tier price on backend
+  const payTier = createPaymentInStore(store, {
+    product_id: prodId,
+    buyer_email: 'guest@cybercode.dev',
+    tier_id: 'commercial',
+  });
+  assert.equal(payTier.status, 200);
+  assert.equal(payTier.body.amount, 99);
+});
+

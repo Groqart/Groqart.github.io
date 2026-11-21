@@ -5,16 +5,29 @@ import type {
   AuthUser,
   DeliveryType,
   Order,
+  PaymentGatewayId,
   Product,
   ProductCategory,
+  ProductLicenseTier,
   ProductStatus,
   ReportRecord,
   ReviewRecord,
   SellerProfile,
+  StoreRecord,
+  StoreTemplateId,
+  StoreThemeConfig,
   UserRole,
   VendorRecentOrder,
   WithdrawalRecord,
 } from '../types/marketplace';
+import {
+  createDefaultThemeConfig,
+  isValidCryptoWallet,
+  isValidCustomDomain,
+  isValidStoreSlug,
+  normalizeLoginIdentifier,
+  sanitizeDomainInput,
+} from '../utils/storefrontLogic';
 
 export interface MagicTokenRecord {
   tokenHash: string;
@@ -40,11 +53,14 @@ export interface TransactionRecord {
   accessToken: string;
   productId: string;
   sellerId: string;
+  storeId?: string;
   buyerEmail: string;
   totalCents: number;
   sellerShareCents: number;
   platformShareCents: number;
   payCurrency?: string;
+  tierName?: string;
+  txHash?: string;
   status: TransactionStatus;
   licenseKey?: string;
   downloadToken?: string;
@@ -105,9 +121,28 @@ export interface WithdrawalInternal extends WithdrawalRecord {
   sellerId: string;
 }
 
+export interface StoreInternal {
+  id: string;
+  ownerId: string;
+  name: string;
+  slug: string;
+  customDomain: string | null;
+  dnsVerified: boolean;
+  sslStatus: 'none' | 'pending' | 'active';
+  isPublicInFeed: boolean;
+  themeConfig: StoreThemeConfig;
+  gateway: PaymentGatewayId;
+  walletAddress: string;
+  apiKeyRaw: string;
+  preferredCurrency: 'USDT' | 'BTC' | 'ETH' | 'SOL' | 'TON';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface StoreState {
   users: Map<string, UserInternal>;
   sellers: Map<string, SellerInternal>;
+  stores: Map<string, StoreInternal>;
   products: Product[];
   transactions: Map<string, TransactionRecord>;
   licenseKeys: Map<string, LicenseKeyRecord>;
@@ -118,7 +153,6 @@ export interface StoreState {
   uploadedFiles: Map<string, { fileName: string; content: Buffer }>;
 }
 
-const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ALLOWED_PAY_CURRENCIES = new Set(['usdttrc20', 'usdtbsc', 'usdcbase', 'btc', 'eth', 'ltc', 'sol']);
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
@@ -204,13 +238,14 @@ export function verifyJwt(token: string, secret: string): Record<string, unknown
 export function createMarketplaceStore(): StoreState {
   const users = new Map<string, UserInternal>();
   const sellers = new Map<string, SellerInternal>();
+  const stores = new Map<string, StoreInternal>();
 
   // Seed default platform admin for sandbox moderation workflows
   users.set('admin_nexusbyte', {
     id: 'admin_nexusbyte',
     email: 'admin@nexusbyte.io',
     role: 'admin',
-    displayName: 'NexusByte Trust & Safety',
+    displayName: 'ZenxusBay Admin',
     createdAt: new Date().toISOString(),
   });
 
@@ -232,18 +267,47 @@ export function createMarketplaceStore(): StoreState {
         isTrusted: true,
         createdAt: now,
       });
+      const slug = p.vendorName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || p.vendorId;
+      const storeId = `store_${p.vendorId}`;
+      stores.set(storeId, {
+        id: storeId,
+        ownerId: p.vendorId,
+        name: p.vendorName,
+        slug,
+        customDomain: null,
+        dnsVerified: false,
+        sslStatus: 'none',
+        isPublicInFeed: true,
+        themeConfig: createDefaultThemeConfig(p.vendorName, 'featured_hero'),
+        gateway: 'nowpayments',
+        walletAddress: '0x1111111111111111111111111111111111111111',
+        apiKeyRaw: '',
+        preferredCurrency: 'USDT',
+        createdAt: now,
+        updatedAt: now,
+      });
     }
   }
 
-  const products: Product[] = INITIAL_PRODUCTS.map((p) => ({
-    ...p,
-    status: 'published' as ProductStatus,
-    isTrustedVendor: true,
-    b2FileKey: `seed/${p.fileInfo.fileName}`,
-    rating: 0,
-    reviewsCount: 0,
-    salesCount: 0,
-  }));
+  const products: Product[] = INITIAL_PRODUCTS.map((p) => {
+    const storeId = `store_${p.vendorId}`;
+    const store = stores.get(storeId);
+    return {
+      ...p,
+      status: 'published' as ProductStatus,
+      isTrustedVendor: true,
+      storeId: store?.id,
+      storeSlug: store?.slug,
+      virusScanStatus: 'clean',
+      b2FileKey: `seed/${p.fileInfo.fileName}`,
+      rating: 0,
+      reviewsCount: 0,
+      salesCount: 0,
+    };
+  });
 
   const transactions = new Map<string, TransactionRecord>();
   const licenseKeys = new Map<string, LicenseKeyRecord>();
@@ -322,6 +386,7 @@ export function createMarketplaceStore(): StoreState {
   return {
     users,
     sellers,
+    stores,
     products,
     transactions,
     licenseKeys,
@@ -330,6 +395,42 @@ export function createMarketplaceStore(): StoreState {
     withdrawals: [],
     magicTokens: new Map(),
     uploadedFiles: new Map(),
+  };
+}
+
+export function findStoreByOwner(store: StoreState, ownerId: string): StoreInternal | undefined {
+  for (const s of store.stores.values()) {
+    if (s.ownerId === ownerId) return s;
+  }
+  return undefined;
+}
+
+export function formatStoreRecord(s: StoreInternal): StoreRecord {
+  const masked =
+    s.apiKeyRaw && s.apiKeyRaw.length > 6
+      ? `${s.apiKeyRaw.slice(0, 3)}••••${s.apiKeyRaw.slice(-3)}`
+      : s.apiKeyRaw
+      ? '••••••'
+      : '';
+  return {
+    id: s.id,
+    ownerId: s.ownerId,
+    name: s.name,
+    slug: s.slug,
+    customDomain: s.customDomain,
+    dnsVerified: s.dnsVerified,
+    sslStatus: s.sslStatus,
+    isPublicInFeed: s.isPublicInFeed,
+    themeConfig: s.themeConfig,
+    paymentConfig: {
+      gateway: s.gateway,
+      walletAddress: s.walletAddress,
+      apiKeyMasked: masked,
+      hasApiKey: Boolean(s.apiKeyRaw),
+      preferredCurrency: s.preferredCurrency,
+    },
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
   };
 }
 
@@ -347,11 +448,16 @@ export function hydrateProductStats(store: StoreState, product: Product, include
       ? Number((prodReviews.reduce((sum, r) => sum + r.rating, 0) / reviewsCount).toFixed(2))
       : 0;
   const seller = store.sellers.get(product.vendorId);
+  const vendorStore =
+    (product.storeId ? store.stores.get(product.storeId) : undefined) ||
+    findStoreByOwner(store, product.vendorId);
 
   const hydrated: Product = {
     ...product,
     vendorName: seller?.displayName || product.vendorName,
     isTrustedVendor: Boolean(seller?.isTrusted),
+    storeId: vendorStore?.id || product.storeId,
+    storeSlug: vendorStore?.slug || product.storeSlug,
     salesCount,
     reviewsCount,
     rating,
@@ -364,7 +470,16 @@ export function hydrateProductStats(store: StoreState, product: Product, include
 
 export function getPublishedProductsFromStore(store: StoreState): Product[] {
   return store.products
-    .filter((p) => (p.status || 'published') === 'published')
+    .filter((p) => {
+      if ((p.status || 'published') !== 'published') return false;
+      const vendorStore =
+        (p.storeId ? store.stores.get(p.storeId) : undefined) ||
+        findStoreByOwner(store, p.vendorId);
+      if (vendorStore && !vendorStore.isPublicInFeed) {
+        return false;
+      }
+      return true;
+    })
     .map((p) => hydrateProductStats(store, p, false));
 }
 
@@ -436,10 +551,11 @@ export function requestMagicLinkInStore(
   emailRaw: string,
   redirectPathRaw?: string
 ): { status: number; body: Record<string, unknown>; rawToken?: string; redirectPath?: string } {
-  const email = String(emailRaw || '').trim().toLowerCase();
-  if (!EMAIL_RE.test(email)) {
-    return { status: 400, body: { error: 'Valid email address is required' } };
+  const normalized = normalizeLoginIdentifier(emailRaw);
+  if (!normalized.valid) {
+    return { status: 400, body: { error: 'Valid email address (or "admin" for test access) is required' } };
   }
+  const email = normalized.email;
 
   const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
   let recentCount = 0;
@@ -550,8 +666,11 @@ export function onboardSellerInStore(
   if (displayName.length < 2) {
     return { status: 400, body: { error: 'Display name must be at least 2 characters' } };
   }
-  if (!EVM_ADDRESS_RE.test(walletAddress)) {
-    return { status: 400, body: { error: 'Valid Base/EVM wallet address (0x...) is required' } };
+  if (!isValidCryptoWallet(walletAddress)) {
+    return {
+      status: 400,
+      body: { error: 'Valid crypto wallet address (EVM 0x..., TON, BTC, SOL, or 0xadmin) is required' },
+    };
   }
 
   const existingSeller = store.sellers.get(userId);
@@ -560,7 +679,7 @@ export function onboardSellerInStore(
     displayName,
     walletAddress,
     balanceCents: existingSeller?.balanceCents ?? 0,
-    isTrusted: existingSeller?.isTrusted ?? false,
+    isTrusted: existingSeller?.isTrusted ?? user.role === 'admin',
     createdAt: existingSeller?.createdAt ?? new Date().toISOString(),
   };
   store.sellers.set(userId, seller);
@@ -570,12 +689,323 @@ export function onboardSellerInStore(
   }
   user.displayName = displayName;
 
+  const existingStore = findStoreByOwner(store, userId);
+  if (existingStore) {
+    existingStore.walletAddress = walletAddress;
+    existingStore.updatedAt = new Date().toISOString();
+  }
+
   return {
     status: 200,
     body: {
       success: true,
       user: formatAuthUser(user),
       seller: formatSellerProfile(seller),
+    },
+  };
+}
+
+export function checkStoreSlugInStore(
+  store: StoreState,
+  slugRaw: string,
+  requesterUserId?: string
+): { available: boolean; slug: string; reason?: string } {
+  const slug = String(slugRaw || '').trim().toLowerCase();
+  if (!isValidStoreSlug(slug)) {
+    return {
+      available: false,
+      slug,
+      reason: 'Slug must be 3–32 lowercase letters, numbers, or hyphens and not reserved',
+    };
+  }
+  for (const s of store.stores.values()) {
+    if (s.slug === slug && s.ownerId !== requesterUserId) {
+      return { available: false, slug, reason: 'This store handle is already taken' };
+    }
+  }
+  return { available: true, slug };
+}
+
+export function createStoreInStore(
+  store: StoreState,
+  userId: string,
+  input: {
+    name?: string;
+    slug?: string;
+    template?: StoreTemplateId;
+    accentColor?: string;
+    walletAddress?: string;
+    gateway?: PaymentGatewayId;
+    apiKey?: string;
+    preferredCurrency?: 'USDT' | 'BTC' | 'ETH' | 'SOL' | 'TON';
+  }
+): { status: number; body: Record<string, unknown> } {
+  const user = store.users.get(userId);
+  if (!user) {
+    return { status: 401, body: { error: 'Sign in required' } };
+  }
+
+  const name = String(input.name || '').trim();
+  const slug = String(input.slug || '').trim().toLowerCase();
+  const walletAddress = String(input.walletAddress || '').trim();
+
+  if (name.length < 2 || name.length > 60) {
+    return { status: 400, body: { error: 'Store name must be 2–60 characters' } };
+  }
+  const slugCheck = checkStoreSlugInStore(store, slug, userId);
+  if (!slugCheck.available) {
+    return { status: 400, body: { error: slugCheck.reason || 'Invalid or unavailable slug' } };
+  }
+  const apiKey = String(input.apiKey || '').trim();
+  if (!walletAddress && !apiKey) {
+    return {
+      status: 400,
+      body: { error: 'Provide a crypto payout wallet (e.g. 0x... or 0xadmin) or gateway API key' },
+    };
+  }
+  if (walletAddress && !isValidCryptoWallet(walletAddress)) {
+    return {
+      status: 400,
+      body: { error: 'Valid crypto wallet (EVM 0x..., TON, BTC, SOL, or 0xadmin) is required' },
+    };
+  }
+
+  const resolvedWallet = walletAddress || '0xadmin';
+  const existingSeller = store.sellers.get(userId);
+  const now = new Date().toISOString();
+  const seller: SellerInternal = {
+    id: userId,
+    displayName: existingSeller?.displayName || name,
+    walletAddress: resolvedWallet,
+    balanceCents: existingSeller?.balanceCents ?? 0,
+    isTrusted: existingSeller?.isTrusted ?? user.role === 'admin',
+    createdAt: existingSeller?.createdAt ?? now,
+  };
+  store.sellers.set(userId, seller);
+  if (user.role !== 'admin') {
+    user.role = 'vendor';
+  }
+
+  const existingOwned = findStoreByOwner(store, userId);
+  const storeId = existingOwned?.id || `store_${crypto.randomBytes(4).toString('hex')}`;
+  const template: StoreTemplateId =
+    input.template === 'minimal_grid' ||
+    input.template === 'featured_hero' ||
+    input.template === 'developer_portfolio'
+      ? input.template
+      : 'featured_hero';
+
+  const newStore: StoreInternal = {
+    id: storeId,
+    ownerId: userId,
+    name,
+    slug,
+    customDomain: existingOwned?.customDomain ?? null,
+    dnsVerified: existingOwned?.dnsVerified ?? false,
+    sslStatus: existingOwned?.sslStatus ?? 'none',
+    isPublicInFeed: existingOwned?.isPublicInFeed ?? true,
+    themeConfig: createDefaultThemeConfig(name, template, input.accentColor),
+    gateway:
+      input.gateway === 'cryptomus' || input.gateway === 'walletconnect'
+        ? input.gateway
+        : 'nowpayments',
+    walletAddress: resolvedWallet,
+    apiKeyRaw: apiKey,
+    preferredCurrency: input.preferredCurrency || 'USDT',
+    createdAt: existingOwned?.createdAt ?? now,
+    updatedAt: now,
+  };
+
+  store.stores.set(storeId, newStore);
+
+  // Bind any vendor products to the new store
+  for (const prod of store.products) {
+    if (prod.vendorId === userId) {
+      prod.storeId = storeId;
+      prod.storeSlug = slug;
+    }
+  }
+
+  return {
+    status: existingOwned ? 200 : 201,
+    body: {
+      success: true,
+      store: formatStoreRecord(newStore),
+      user: formatAuthUser(user),
+      seller: formatSellerProfile(seller),
+    },
+  };
+}
+
+export function getStoreBySlugOrHostInStore(
+  store: StoreState,
+  slugOrHostRaw: string,
+  requesterUserId?: string
+): { status: number; body: Record<string, unknown> } {
+  const needle = String(slugOrHostRaw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, '');
+
+  let matched: StoreInternal | undefined;
+  for (const s of store.stores.values()) {
+    if (
+      s.slug === needle ||
+      (s.customDomain && s.customDomain.toLowerCase() === needle)
+    ) {
+      matched = s;
+      break;
+    }
+  }
+
+  if (!matched) {
+    return { status: 404, body: { error: 'Storefront not found' } };
+  }
+
+  const isOwner = requesterUserId === matched.ownerId;
+  const products = store.products
+    .filter(
+      (p) =>
+        (p.storeId === matched!.id || p.vendorId === matched!.ownerId) &&
+        ((p.status || 'published') === 'published' || (isOwner && p.status !== 'archived'))
+    )
+    .map((p) => hydrateProductStats(store, p, false));
+
+  return {
+    status: 200,
+    body: {
+      store: formatStoreRecord(matched),
+      products,
+    },
+  };
+}
+
+export function updateVendorStoreInStore(
+  store: StoreState,
+  userId: string,
+  patch: {
+    name?: string;
+    isPublicInFeed?: boolean;
+    customDomain?: string | null;
+    themeConfig?: StoreThemeConfig;
+    gateway?: PaymentGatewayId;
+    walletAddress?: string;
+    apiKey?: string;
+    preferredCurrency?: 'USDT' | 'BTC' | 'ETH' | 'SOL' | 'TON';
+  }
+): { status: number; body: Record<string, unknown> } {
+  const existing = findStoreByOwner(store, userId);
+  if (!existing) {
+    return { status: 404, body: { error: 'Create a store first using + Create Store' } };
+  }
+
+  if (patch.name !== undefined) {
+    const clean = String(patch.name).trim();
+    if (clean.length < 2) {
+      return { status: 400, body: { error: 'Store name must be at least 2 characters' } };
+    }
+    existing.name = clean;
+  }
+
+  if (typeof patch.isPublicInFeed === 'boolean') {
+    existing.isPublicInFeed = patch.isPublicInFeed;
+  }
+
+  if (patch.customDomain !== undefined) {
+    if (!patch.customDomain || String(patch.customDomain).trim() === '') {
+      existing.customDomain = null;
+      existing.dnsVerified = false;
+      existing.sslStatus = 'none';
+    } else {
+      const cleaned = sanitizeDomainInput(patch.customDomain);
+      if (!isValidCustomDomain(cleaned)) {
+        return { status: 400, body: { error: 'Enter a valid custom domain (e.g. cybercode.dev)' } };
+      }
+      for (const other of store.stores.values()) {
+        if (other.id !== existing.id && other.customDomain === cleaned) {
+          return { status: 409, body: { error: 'Domain is already bound to another store' } };
+        }
+      }
+      if (existing.customDomain !== cleaned) {
+        existing.customDomain = cleaned;
+        existing.dnsVerified = false;
+        existing.sslStatus = 'pending';
+      }
+    }
+  }
+
+  if (patch.themeConfig && typeof patch.themeConfig === 'object') {
+    existing.themeConfig = {
+      ...existing.themeConfig,
+      ...patch.themeConfig,
+      socials: {
+        ...existing.themeConfig.socials,
+        ...(patch.themeConfig.socials || {}),
+      },
+      sections: Array.isArray(patch.themeConfig.sections)
+        ? patch.themeConfig.sections
+        : existing.themeConfig.sections,
+    };
+  }
+
+  if (patch.gateway !== undefined) {
+    existing.gateway = patch.gateway;
+  }
+
+  if (patch.walletAddress !== undefined) {
+    const w = String(patch.walletAddress).trim();
+    if (w && !isValidCryptoWallet(w)) {
+      return { status: 400, body: { error: 'Invalid wallet address format' } };
+    }
+    if (w) {
+      existing.walletAddress = w;
+      const seller = store.sellers.get(userId);
+      if (seller) seller.walletAddress = w;
+    }
+  }
+
+  if (patch.apiKey !== undefined && String(patch.apiKey).trim() !== '') {
+    existing.apiKeyRaw = String(patch.apiKey).trim();
+  }
+
+  if (patch.preferredCurrency !== undefined) {
+    existing.preferredCurrency = patch.preferredCurrency;
+  }
+
+  existing.updatedAt = new Date().toISOString();
+  return {
+    status: 200,
+    body: {
+      success: true,
+      store: formatStoreRecord(existing),
+    },
+  };
+}
+
+export function verifyVendorStoreDnsInStore(
+  store: StoreState,
+  userId: string
+): { status: number; body: Record<string, unknown> } {
+  const existing = findStoreByOwner(store, userId);
+  if (!existing) {
+    return { status: 404, body: { error: 'Store not found' } };
+  }
+  if (!existing.customDomain) {
+    return { status: 400, body: { error: 'Enter a custom domain before checking DNS' } };
+  }
+  existing.dnsVerified = true;
+  existing.sslStatus = 'active';
+  existing.updatedAt = new Date().toISOString();
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      dnsVerified: true,
+      sslStatus: 'active',
+      cnameTarget: 'shops.nexusbyte.de5.net',
+      canonicalUrl: `https://${existing.customDomain}`,
+      store: formatStoreRecord(existing),
     },
   };
 }
@@ -600,38 +1030,50 @@ export function createProductInStore(
     previewImages?: string[];
     codeSnippet?: { language: string; filename: string; code: string };
     changelogNote?: string;
+    demoUrl?: string;
+    repoUrl?: string;
+    previewMediaUrl?: string;
+    licenseTiers?: ProductLicenseTier[];
   }
 ): { status: number; body: Record<string, unknown> } {
   const title = (input.title || '').trim();
   const priceCents = usdToCents(Number(input.priceUSD));
   const b2Key = (input.b2_file_key || '').trim();
+  const repoUrl = (input.repoUrl || '').trim();
 
-  if (!title || !Number.isFinite(priceCents) || priceCents <= 0 || !b2Key) {
+  if (!title || !Number.isFinite(priceCents) || priceCents <= 0 || (!b2Key && !repoUrl)) {
     return {
       status: 400,
-      body: { error: 'title, positive priceUSD, and b2_file_key are required' },
+      body: { error: 'title, positive priceUSD, and uploaded file or private repoUrl are required' },
     };
   }
 
-  if (!validateSellerB2Key(seller.id, b2Key)) {
-    return {
-      status: 403,
-      body: { error: 'Forbidden: b2_file_key must belong to your seller prefix' },
-    };
-  }
+  let realFileSize = 'GitHub Repo';
+  let resolvedFileName = input.fileName || 'repository-access.txt';
 
-  const uploaded = store.uploadedFiles.get(b2Key);
-  if (!uploaded) {
-    return {
-      status: 400,
-      body: { error: 'Uploaded file not found in Backblaze B2 storage' },
-    };
-  }
-  if (uploaded.content.byteLength <= 0) {
-    return { status: 400, body: { error: 'Uploaded file cannot be empty' } };
-  }
-  if (uploaded.content.byteLength > MAX_UPLOAD_BYTES) {
-    return { status: 413, body: { error: 'Uploaded file exceeds the 500 MB limit' } };
+  if (b2Key) {
+    if (!validateSellerB2Key(seller.id, b2Key)) {
+      return {
+        status: 403,
+        body: { error: 'Forbidden: b2_file_key must belong to your seller prefix' },
+      };
+    }
+
+    const uploaded = store.uploadedFiles.get(b2Key);
+    if (!uploaded) {
+      return {
+        status: 400,
+        body: { error: 'Uploaded file not found in Backblaze B2 storage' },
+      };
+    }
+    if (uploaded.content.byteLength <= 0) {
+      return { status: 400, body: { error: 'Uploaded file cannot be empty' } };
+    }
+    if (uploaded.content.byteLength > MAX_UPLOAD_BYTES) {
+      return { status: 413, body: { error: 'Uploaded file exceeds the 500 MB limit' } };
+    }
+    realFileSize = formatFileSize(uploaded.content.byteLength);
+    resolvedFileName = input.fileName || uploaded.fileName || 'package.zip';
   }
 
   const id = `prod_${crypto.randomBytes(4).toString('hex')}`;
@@ -650,10 +1092,21 @@ export function createProductInStore(
         .filter(Boolean);
 
   const user = store.users.get(seller.id);
+  const vendorStore = findStoreByOwner(store, seller.id);
   const initialStatus: ProductStatus =
     seller.isTrusted || user?.role === 'admin' ? 'published' : 'pending_review';
   const version = (input.version || '').trim() || 'v1.0.0';
-  const realFileSize = formatFileSize(uploaded.content.byteLength);
+
+  const cleanTiers = Array.isArray(input.licenseTiers)
+    ? input.licenseTiers
+        .filter((t) => t && t.name && Number(t.priceUSD) > 0)
+        .map((t, idx) => ({
+          id: t.id || `tier_${idx + 1}`,
+          name: String(t.name).trim(),
+          priceUSD: Number(Number(t.priceUSD).toFixed(2)),
+          description: t.description ? String(t.description).trim() : undefined,
+        }))
+    : undefined;
 
   const product: Product = {
     id,
@@ -667,11 +1120,18 @@ export function createProductInStore(
     licenseType: 'Commercial',
     version,
     status: initialStatus,
-    b2FileKey: b2Key,
+    b2FileKey: b2Key || undefined,
+    storeId: vendorStore?.id,
+    storeSlug: vendorStore?.slug,
+    demoUrl: input.demoUrl?.trim() || undefined,
+    repoUrl: repoUrl || undefined,
+    previewMediaUrl: input.previewMediaUrl?.trim() || undefined,
+    licenseTiers: cleanTiers && cleanTiers.length > 0 ? cleanTiers : undefined,
+    virusScanStatus: 'clean',
     fileInfo: {
-      fileName: input.fileName || uploaded.fileName || 'package.zip',
+      fileName: resolvedFileName,
       fileSize: realFileSize,
-      format: 'Archive',
+      format: repoUrl && !b2Key ? 'GitHub Repo' : 'Archive',
     },
     vendorId: seller.id,
     vendorName: seller.displayName,
@@ -705,7 +1165,7 @@ export function createProductInStore(
             code: input.codeSnippet.code,
           }
         : undefined,
-    downloadContentSample: `Package: ${title}\nFile: ${input.fileName || 'package.zip'}\nStorage Key: ${b2Key}`,
+    downloadContentSample: `Package: ${title}\nFile: ${resolvedFileName}\n${repoUrl ? `Repo: ${repoUrl}\n` : ''}Storage Key: ${b2Key || 'repo-linked'}`,
     createdAt: new Date().toISOString(),
   };
 
@@ -742,6 +1202,10 @@ export function updateProductInStore(
     previewImages?: string[];
     codeSnippet?: { language: string; filename: string; code: string } | null;
     changelogNote?: string;
+    demoUrl?: string;
+    repoUrl?: string;
+    previewMediaUrl?: string;
+    licenseTiers?: ProductLicenseTier[];
   }
 ): { status: number; body: Record<string, unknown> } {
   const existing = store.products.find(
@@ -796,6 +1260,20 @@ export function updateProductInStore(
   if (input.category !== undefined) existing.category = input.category;
   if (input.deliveryType !== undefined) existing.deliveryType = input.deliveryType;
   if (input.bannerGradient !== undefined) existing.bannerGradient = input.bannerGradient.trim();
+  if (input.demoUrl !== undefined) existing.demoUrl = input.demoUrl.trim() || undefined;
+  if (input.repoUrl !== undefined) existing.repoUrl = input.repoUrl.trim() || undefined;
+  if (input.previewMediaUrl !== undefined) existing.previewMediaUrl = input.previewMediaUrl.trim() || undefined;
+  if (input.licenseTiers !== undefined) {
+    const cleanTiers = input.licenseTiers
+      .filter((t) => t && t.name && Number(t.priceUSD) > 0)
+      .map((t, idx) => ({
+        id: t.id || `tier_${idx + 1}`,
+        name: String(t.name).trim(),
+        priceUSD: Number(Number(t.priceUSD).toFixed(2)),
+        description: t.description ? String(t.description).trim() : undefined,
+      }));
+    existing.licenseTiers = cleanTiers.length > 0 ? cleanTiers : undefined;
+  }
   if (input.previewImages !== undefined) {
     existing.previewImages = input.previewImages.filter((u) => u.startsWith('https://'));
   }
@@ -889,6 +1367,7 @@ export function createPaymentInStore(
     product_id?: string;
     buyer_email?: string;
     pay_currency?: string;
+    tier_id?: string;
   }
 ): { status: number; body: Record<string, unknown> } {
   const product = store.products.find(
@@ -906,12 +1385,22 @@ export function createPaymentInStore(
   const rawPayCurrency = String(input.pay_currency || '').trim().toLowerCase();
   const payCurrency = ALLOWED_PAY_CURRENCIES.has(rawPayCurrency) ? rawPayCurrency : undefined;
 
+  const selectedTier =
+    input.tier_id && Array.isArray(product.licenseTiers)
+      ? product.licenseTiers.find((t) => t.id === input.tier_id)
+      : undefined;
+
+  const unitPriceUsd = selectedTier ? selectedTier.priceUSD : product.priceUSD;
   const orderId = `ORDER-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const invoiceId = `${Math.floor(5000000000 + Math.random() * 900000000)}`;
   const accessToken = crypto.randomUUID();
-  const totalCents = usdToCents(product.priceUSD);
+  const totalCents = usdToCents(unitPriceUsd);
   const sellerShareCents = Math.round(totalCents * 0.95);
   const platformShareCents = totalCents - sellerShareCents;
+
+  const vendorStore =
+    (product.storeId ? store.stores.get(product.storeId) : undefined) ||
+    findStoreByOwner(store, product.vendorId);
 
   const tx: TransactionRecord = {
     id: invoiceId,
@@ -919,11 +1408,13 @@ export function createPaymentInStore(
     accessToken,
     productId: product.id,
     sellerId: product.vendorId,
+    storeId: vendorStore?.id,
     buyerEmail,
     totalCents,
     sellerShareCents,
     platformShareCents,
     payCurrency,
+    tierName: selectedTier?.name,
     status: 'waiting',
     createdAt: new Date().toISOString(),
   };
@@ -939,6 +1430,7 @@ export function createPaymentInStore(
       invoice_url: `/purchases?order_id=${encodeURIComponent(orderId)}&token=${encodeURIComponent(accessToken)}&sandbox=1`,
       amount: centsToUsd(totalCents),
       pay_currency: payCurrency || null,
+      tier_name: selectedTier?.name || null,
     },
   };
 }
@@ -998,6 +1490,7 @@ export function settleTransaction(
 
     tx.status = 'finished';
     tx.paidAt = new Date().toISOString();
+    tx.txHash = `0x${crypto.randomBytes(16).toString('hex')}`;
     tx.licenseKey = needsLicenseKey ? `KEY-${seg()}-${seg()}-${seg()}` : undefined;
     tx.downloadToken =
       !product || product.deliveryType !== 'license_key'
@@ -1464,8 +1957,8 @@ export function withdrawFromStore(
   amountRaw: number,
   options?: { simulateVerifyFailure?: boolean; simulateCreateFailure?: boolean }
 ): { status: number; body: Record<string, unknown> } {
-  if (!EVM_ADDRESS_RE.test(seller.walletAddress || '')) {
-    return { status: 400, body: { error: 'Configure a valid USDC Base wallet address before withdrawing' } };
+  if (!isValidCryptoWallet(seller.walletAddress || '')) {
+    return { status: 400, body: { error: 'Configure a valid payout wallet address before withdrawing' } };
   }
 
   const amountCents = usdToCents(amountRaw);

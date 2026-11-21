@@ -14,6 +14,8 @@ import {
   Monitor,
   Sun,
   Moon,
+  Plus,
+  ExternalLink,
 } from 'lucide-react';
 import type { AuthUser, UserRole } from '../types/marketplace';
 import type { ThemePreference } from '../utils/catalogLogic';
@@ -30,6 +32,8 @@ interface NavbarProps {
   setCurrentRole: (role: UserRole) => void;
   purchasesCount: number;
   user: AuthUser | null;
+  vendorStoreSlug?: string | null;
+  onOpenCreateStore: () => void;
   onLogout: () => void;
 }
 
@@ -44,6 +48,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   setCurrentRole,
   purchasesCount,
   user,
+  vendorStoreSlug,
+  onOpenCreateStore,
   onLogout,
 }) => {
   const navigate = useNavigate();
@@ -162,7 +168,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="hidden h-8 w-8 shrink-0 dark:block"
               referrerPolicy="no-referrer"
             />
-            <span className="font-display text-[19px] sm:text-[21px] tracking-tight leading-none whitespace-nowrap">
+            <span
+              translate="no"
+              className="notranslate font-display text-[19px] sm:text-[21px] tracking-tight leading-none whitespace-nowrap"
+            >
               <span className="font-extrabold text-[#0B2242] dark:text-white">ZENXUS</span>
               <span className="font-medium text-[#1A8FD6] dark:text-[#45D4EC]">BAY</span>
             </span>
@@ -207,8 +216,25 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </form>
 
-        {/* Right Zone: Saved / Cart + User Profile Menu */}
+        {/* Right Zone: + Store + Saved / Cart + User Profile Menu */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              if (vendorStoreSlug) {
+                setCurrentRole('vendor');
+                navigate('/vendor?tab=builder');
+              } else {
+                onOpenCreateStore();
+              }
+            }}
+            aria-label={vendorStoreSlug ? 'Open Storefront Builder' : 'Open Store Setup Wizard'}
+            className="flex h-9 items-center gap-1.5 rounded-full bg-[#0EA5E9] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0284C7] focus-visible:outline-2 focus-visible:outline-cyan-500 transition cursor-pointer whitespace-nowrap"
+          >
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            <span>Store</span>
+          </button>
+
           <button
             type="button"
             onClick={openCart}
@@ -304,6 +330,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <Store className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                     <span>Vendor Portal</span>
                   </button>
+
+                  {vendorStoreSlug && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsProfileOpen(false);
+                        navigate(`/@${vendorStoreSlug}`);
+                      }}
+                      className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <ExternalLink className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                        <span>My Storefront</span>
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-400">/@{vendorStoreSlug}</span>
+                    </button>
+                  )}
 
                   {isAdmin && (
                     <button

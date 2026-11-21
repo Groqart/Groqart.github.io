@@ -3,8 +3,13 @@ import type {
   AuthUser,
   CryptoCurrency,
   Order,
+  PaymentGatewayId,
   Product,
+  ProductLicenseTier,
   SellerProfile,
+  StoreRecord,
+  StoreTemplateId,
+  StoreThemeConfig,
   UserRole,
 } from '../types/marketplace';
 import { getPayCurrencyTicker } from '../utils/nowpaymentsLogic';
@@ -13,6 +18,7 @@ import {
   type ResolvedTheme,
   type ThemePreference,
 } from '../utils/catalogLogic';
+import { normalizeLoginIdentifier } from '../utils/storefrontLogic';
 import { API_BASE } from '../utils/apiBase';
 
 const AUTH_TOKEN_KEY = 'nexusbyte_auth_token';
@@ -22,6 +28,13 @@ const THEME_STORAGE_KEY = 'zenxusbay_theme';
 export interface PendingCheckout {
   product: Product;
   cryptoCurrency: CryptoCurrency;
+  selectedTier?: ProductLicenseTier;
+  storeContext?: {
+    storeName: string;
+    storeSlug: string;
+    gateway: PaymentGatewayId;
+    isStandalone: boolean;
+  };
 }
 
 interface MarketplaceContextType {
@@ -39,9 +52,12 @@ interface MarketplaceContextType {
   authToken: string | null;
   user: AuthUser | null;
   seller: SellerProfile | null;
+  vendorStore: StoreRecord | null;
+  isCreateStoreOpen: boolean;
   isAuthLoading: boolean;
   setIsCartOpen: (open: boolean) => void;
   setIsSidebarOpen: (open: boolean) => void;
+  setIsCreateStoreOpen: (open: boolean) => void;
   toggleSidebar: () => void;
   setThemePreference: (pref: ThemePreference) => void;
   setCurrentRole: (role: UserRole) => void;
@@ -50,7 +66,14 @@ interface MarketplaceContextType {
   addToCart: (product: Product) => void;
   removeFromCart: (id: string) => void;
   clearCart: () => void;
-  initiateBuy: (product: Product, cryptoCurrency?: CryptoCurrency) => void;
+  initiateBuy: (
+    product: Product,
+    cryptoCurrency?: CryptoCurrency,
+    options?: {
+      selectedTier?: ProductLicenseTier;
+      storeContext?: PendingCheckout['storeContext'];
+    }
+  ) => void;
   createPaymentCheckout: (
     buyerEmail: string,
     overrideCurrency?: CryptoCurrency
@@ -64,6 +87,27 @@ interface MarketplaceContextType {
     displayName: string,
     walletAddress: string
   ) => Promise<{ ok: boolean; error?: string }>;
+  createStore: (input: {
+    name: string;
+    slug: string;
+    template: StoreTemplateId;
+    accentColor?: string;
+    walletAddress?: string;
+    gateway?: PaymentGatewayId;
+    apiKey?: string;
+  }) => Promise<{ ok: boolean; error?: string; store?: StoreRecord }>;
+  updateVendorStore: (patch: {
+    name?: string;
+    isPublicInFeed?: boolean;
+    customDomain?: string | null;
+    themeConfig?: StoreThemeConfig;
+    gateway?: PaymentGatewayId;
+    walletAddress?: string;
+    apiKey?: string;
+    preferredCurrency?: 'USDT' | 'BTC' | 'ETH' | 'SOL' | 'TON';
+  }) => Promise<{ ok: boolean; error?: string; store?: StoreRecord }>;
+  verifyStoreDns: () => Promise<{ ok: boolean; error?: string; store?: StoreRecord }>;
+  fetchVendorStore: () => Promise<void>;
   logout: () => void;
   addProduct: (product: Product) => void;
   removeProduct: (id: string) => void;
@@ -90,6 +134,8 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [seller, setSeller] = useState<SellerProfile | null>(null);
+  const [vendorStore, setVendorStore] = useState<StoreRecord | null>(null);
+  const [isCreateStoreOpen, setIsCreateStoreOpen] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   useEffect(() => {
@@ -180,6 +226,7 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
       setAuthToken(null);
       setUser(null);
       setSeller(null);
+      setVendorStore(null);
       setOrders([]);
       setIsAuthLoading(false);
       return;
@@ -195,6 +242,7 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
         setAuthToken(null);
         setUser(null);
         setSeller(null);
+        setVendorStore(null);
         setOrders([]);
         return;
       }
@@ -202,6 +250,7 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
       setAuthToken(stored);
       setUser(data.user || null);
       setSeller(data.seller || null);
+      setVendorStore(data.store || null);
       if (data.user?.role === 'admin') {
         setCurrentRole('admin');
       } else if (data.seller) {
@@ -241,10 +290,22 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
     setCart([]);
   };
 
-  const initiateBuy = (product: Product, cryptoCurrency: CryptoCurrency = 'USDT') => {
+  const initiateBuy = (
+    product: Product,
+    cryptoCurrency: CryptoCurrency = 'USDT',
+    options?: {
+      selectedTier?: ProductLicenseTier;
+      storeContext?: PendingCheckout['storeContext'];
+    }
+  ) => {
     if (typeof window === 'undefined') return;
     setIsCartOpen(false);
-    setPendingCheckout({ product, cryptoCurrency });
+    setPendingCheckout({
+      product,
+      cryptoCurrency,
+      selectedTier: options?.selectedTier,
+      storeContext: options?.storeContext,
+    });
   };
 
   const createPaymentCheckout = async (
@@ -274,13 +335,14 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
           product_id: pendingCheckout.product.id,
           buyer_email: email,
           pay_currency: payCurrency,
+          tier_id: pendingCheckout.selectedTier?.id,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.invoice_url) {
         return {
           ok: false,
-          error: data.error || 'Failed to initialize NOWPayments checkout',
+          error: data.error || 'Failed to initialize crypto checkout',
         };
       }
 
@@ -292,15 +354,15 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   const requestMagicLink = async (emailInput: string, redirectPath = '/purchases') => {
-    const email = emailInput.trim().toLowerCase();
-    if (!email || !email.includes('@')) {
-      return { ok: false, error: 'Valid email address is required' };
+    const normalized = normalizeLoginIdentifier(emailInput);
+    if (!normalized.valid) {
+      return { ok: false, error: 'Valid email address (or "admin") is required' };
     }
     try {
       const res = await fetch(`${API_BASE}/api/auth/request-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, redirectPath }),
+        body: JSON.stringify({ email: normalized.email, redirectPath }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -334,6 +396,13 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
       } else if (data.seller) {
         setCurrentRole('vendor');
       }
+      const meRes = await fetch(`${API_BASE}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${data.token}` },
+      });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        setVendorStore(meData.store || null);
+      }
       await fetchOrdersWithToken(data.token);
       showToast(`Signed in as ${data.user?.email || 'user'}`);
       return { ok: true };
@@ -341,6 +410,24 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
       return { ok: false, error: 'Network error verifying magic link' };
     }
   };
+
+  const fetchVendorStore = useCallback(async () => {
+    if (!authToken) {
+      setVendorStore(null);
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/vendor/store`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVendorStore(data.store || null);
+      }
+    } catch {
+      // ignore offline
+    }
+  }, [authToken]);
 
   const completeVendorOnboarding = async (displayName: string, walletAddress: string) => {
     if (!authToken) {
@@ -372,6 +459,81 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
+  const createStore: MarketplaceContextType['createStore'] = async (input) => {
+    if (!authToken) {
+      return { ok: false, error: 'Please sign in first' };
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/stores`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(input),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.store) {
+        return { ok: false, error: data.error || 'Failed to launch storefront' };
+      }
+      setVendorStore(data.store);
+      if (data.user) setUser(data.user);
+      if (data.seller) setSeller(data.seller);
+      setCurrentRole('vendor');
+      showToast(`Store "${data.store.name}" launched!`);
+      return { ok: true, store: data.store };
+    } catch {
+      return { ok: false, error: 'Network error creating store' };
+    }
+  };
+
+  const updateVendorStore: MarketplaceContextType['updateVendorStore'] = async (patch) => {
+    if (!authToken) {
+      return { ok: false, error: 'Please sign in first' };
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/vendor/store`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.store) {
+        return { ok: false, error: data.error || 'Failed to save store configuration' };
+      }
+      setVendorStore(data.store);
+      await fetchProducts();
+      showToast('Storefront configuration saved');
+      return { ok: true, store: data.store };
+    } catch {
+      return { ok: false, error: 'Network error updating store' };
+    }
+  };
+
+  const verifyStoreDns: MarketplaceContextType['verifyStoreDns'] = async () => {
+    if (!authToken) {
+      return { ok: false, error: 'Please sign in first' };
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/vendor/store/verify-dns`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.store) {
+        return { ok: false, error: data.error || 'DNS verification failed' };
+      }
+      setVendorStore(data.store);
+      showToast(`DNS verified & SSL active for ${data.store.customDomain}`);
+      return { ok: true, store: data.store };
+    } catch {
+      return { ok: false, error: 'Network error checking DNS' };
+    }
+  };
+
   const logout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -379,6 +541,7 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
     setAuthToken(null);
     setUser(null);
     setSeller(null);
+    setVendorStore(null);
     setOrders([]);
     setCurrentRole('buyer');
     showToast('Signed out');
@@ -416,9 +579,12 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
         authToken,
         user,
         seller,
+        vendorStore,
+        isCreateStoreOpen,
         isAuthLoading,
         setIsCartOpen,
         setIsSidebarOpen,
+        setIsCreateStoreOpen,
         toggleSidebar,
         setThemePreference,
         setCurrentRole,
@@ -432,6 +598,10 @@ export const MarketplaceProvider: React.FC<{ children: ReactNode }> = ({ childre
         requestMagicLink,
         verifyMagicToken,
         completeVendorOnboarding,
+        createStore,
+        updateVendorStore,
+        verifyStoreDns,
+        fetchVendorStore,
         logout,
         addProduct,
         removeProduct,

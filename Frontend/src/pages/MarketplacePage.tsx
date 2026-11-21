@@ -17,7 +17,12 @@ import {
   MARKETPLACE_CATEGORIES,
   type CatalogSortOption,
 } from '../utils/catalogLogic';
-import { getHardenedPriceHandlers } from '../utils/priceInput';
+import {
+  clampCatalogPrice,
+  getHardenedPriceHandlers,
+  normalizePriceInputChange,
+  stepCatalogPriceByWheel,
+} from '../utils/priceInput';
 
 export const MarketplacePage: React.FC = () => {
   const navigate = useNavigate();
@@ -83,6 +88,11 @@ export const MarketplacePage: React.FC = () => {
     });
   };
 
+  const minRangeRef = useRef<HTMLInputElement>(null);
+  const maxRangeRef = useRef<HTMLInputElement>(null);
+  const minInputRef = useRef<HTMLInputElement>(null);
+  const maxInputRef = useRef<HTMLInputElement>(null);
+
   const [minDraft, setMinDraft] = useState<string | null>(null);
   const [maxDraft, setMaxDraft] = useState<string | null>(null);
 
@@ -91,14 +101,32 @@ export const MarketplacePage: React.FC = () => {
       (prev) => {
         const next = new URLSearchParams(prev);
         if (bound === 'min') {
-          if (typeof value === 'number' && Number.isFinite(value) && value > priceBounds.min) {
-            next.set('min', String(value));
+          const currentMax =
+            next.has('max') && Number.isFinite(Number(next.get('max')))
+              ? clampCatalogPrice(Number(next.get('max')), 0, priceBounds.max)
+              : priceBounds.max;
+          if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+            const clamped = clampCatalogPrice(value, 0, currentMax);
+            if (clamped > 0) {
+              next.set('min', String(clamped));
+            } else {
+              next.delete('min');
+            }
           } else {
             next.delete('min');
           }
         } else {
+          const currentMin =
+            next.has('min') && Number.isFinite(Number(next.get('min')))
+              ? clampCatalogPrice(Number(next.get('min')), 0, priceBounds.max)
+              : 0;
           if (typeof value === 'number' && Number.isFinite(value) && value < priceBounds.max) {
-            next.set('max', String(value));
+            const clamped = clampCatalogPrice(value, currentMin, priceBounds.max);
+            if (clamped < priceBounds.max) {
+              next.set('max', String(clamped));
+            } else {
+              next.delete('max');
+            }
           } else {
             next.delete('max');
           }
@@ -144,8 +172,92 @@ export const MarketplacePage: React.FC = () => {
     ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
     : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
-  const sliderMinValue = activeMinPrice ?? priceBounds.min;
-  const sliderMaxValue = activeMaxPrice ?? priceBounds.max;
+  const sliderMinValue = clampCatalogPrice(activeMinPrice ?? 0, 0, priceBounds.max);
+  const sliderMaxValue = clampCatalogPrice(
+    activeMaxPrice ?? priceBounds.max,
+    sliderMinValue,
+    priceBounds.max
+  );
+
+  const wheelStateRef = useRef({
+    sliderMinValue,
+    sliderMaxValue,
+    maxBound: priceBounds.max,
+    minDraft,
+    maxDraft,
+    updatePriceParam,
+  });
+  wheelStateRef.current = {
+    sliderMinValue,
+    sliderMaxValue,
+    maxBound: priceBounds.max,
+    minDraft,
+    maxDraft,
+    updatePriceParam,
+  };
+
+  useEffect(() => {
+    if (!isFilterOpen) return;
+
+    const handleMinWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const state = wheelStateRef.current;
+      const step = e.shiftKey ? 10 : 1;
+      const base =
+        state.minDraft !== null &&
+        state.minDraft !== '' &&
+        Number.isFinite(Number(state.minDraft))
+          ? Number(state.minDraft)
+          : state.sliderMinValue;
+      const next = stepCatalogPriceByWheel(
+        base,
+        e.deltaY,
+        e.deltaX,
+        0,
+        state.sliderMaxValue,
+        step
+      );
+      setMinDraft(null);
+      state.updatePriceParam('min', next);
+    };
+
+    const handleMaxWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const state = wheelStateRef.current;
+      const step = e.shiftKey ? 10 : 1;
+      const base =
+        state.maxDraft !== null &&
+        state.maxDraft !== '' &&
+        Number.isFinite(Number(state.maxDraft))
+          ? Number(state.maxDraft)
+          : state.sliderMaxValue;
+      const next = stepCatalogPriceByWheel(
+        base,
+        e.deltaY,
+        e.deltaX,
+        state.sliderMinValue,
+        state.maxBound,
+        step
+      );
+      setMaxDraft(null);
+      state.updatePriceParam('max', next);
+    };
+
+    const minEls = [minRangeRef.current, minInputRef.current].filter(
+      (el): el is HTMLInputElement => Boolean(el)
+    );
+    const maxEls = [maxRangeRef.current, maxInputRef.current].filter(
+      (el): el is HTMLInputElement => Boolean(el)
+    );
+
+    minEls.forEach((el) => el.addEventListener('wheel', handleMinWheel, { passive: false }));
+    maxEls.forEach((el) => el.addEventListener('wheel', handleMaxWheel, { passive: false }));
+
+    return () => {
+      minEls.forEach((el) => el.removeEventListener('wheel', handleMinWheel));
+      maxEls.forEach((el) => el.removeEventListener('wheel', handleMaxWheel));
+    };
+  }, [isFilterOpen]);
 
   const handleShareProduct = async (product: Product) => {
     const url = `${window.location.origin}/product/${product.id}`;
@@ -249,14 +361,20 @@ export const MarketplacePage: React.FC = () => {
                       <span className="font-mono tabular-nums">${sliderMinValue}</span>
                     </div>
                     <input
+                      ref={minRangeRef}
                       id="price-min-range"
                       type="range"
-                      min={priceBounds.min}
+                      min={0}
                       max={priceBounds.max}
+                      step={1}
                       value={Math.min(sliderMinValue, sliderMaxValue)}
                       onChange={(e) => {
                         setMinDraft(null);
-                        const val = Math.min(Number(e.target.value), sliderMaxValue);
+                        const val = clampCatalogPrice(
+                          Number(e.target.value),
+                          0,
+                          sliderMaxValue
+                        );
                         updatePriceParam('min', val);
                       }}
                       className="w-full accent-[#0EA5E9] cursor-pointer"
@@ -269,14 +387,20 @@ export const MarketplacePage: React.FC = () => {
                       <span className="font-mono tabular-nums">${sliderMaxValue}</span>
                     </div>
                     <input
+                      ref={maxRangeRef}
                       id="price-max-range"
                       type="range"
-                      min={priceBounds.min}
+                      min={0}
                       max={priceBounds.max}
+                      step={1}
                       value={Math.max(sliderMaxValue, sliderMinValue)}
                       onChange={(e) => {
                         setMaxDraft(null);
-                        const val = Math.max(Number(e.target.value), sliderMinValue);
+                        const val = clampCatalogPrice(
+                          Number(e.target.value),
+                          sliderMinValue,
+                          priceBounds.max
+                        );
                         updatePriceParam('max', val);
                       }}
                       className="w-full accent-[#0EA5E9] cursor-pointer"
@@ -290,32 +414,59 @@ export const MarketplacePage: React.FC = () => {
                       Minimum price
                     </label>
                     <input
+                      ref={minInputRef}
                       id="price-min-input"
                       type="number"
                       min={0}
+                      max={sliderMaxValue}
                       step="1"
                       inputMode="decimal"
                       value={minDraft !== null ? minDraft : String(sliderMinValue)}
-                      {...getHardenedPriceHandlers((cleaned) => {
-                        setMinDraft(cleaned);
-                        const parsed = Number(cleaned);
-                        if (Number.isFinite(parsed) && parsed >= 0) {
-                          updatePriceParam('min', parsed);
-                        }
-                      })}
+                      {...(() => {
+                        const hardened = getHardenedPriceHandlers(
+                          (cleaned) => {
+                            const parsed = Number(cleaned);
+                            if (Number.isFinite(parsed)) {
+                              const clamped = clampCatalogPrice(parsed, 0, sliderMaxValue);
+                              setMinDraft(String(clamped));
+                              updatePriceParam('min', clamped);
+                            }
+                          },
+                          { allowWheel: true }
+                        );
+                        return {
+                          ...hardened,
+                          onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+                            hardened.onKeyDown(e);
+                            if (e.key === 'Enter') {
+                              e.currentTarget.blur();
+                            }
+                          },
+                        };
+                      })()}
                       onChange={(e) => {
-                        const raw = e.target.value;
-                        setMinDraft(raw);
-                        if (raw === '') {
-                          updatePriceParam('min', undefined);
-                        } else {
-                          const parsed = Number(raw);
-                          if (Number.isFinite(parsed) && parsed >= 0) {
-                            updatePriceParam('min', parsed);
+                        const result = normalizePriceInputChange(
+                          e.target.value,
+                          0,
+                          sliderMaxValue,
+                          true
+                        );
+                        if (!result.valid) return;
+                        setMinDraft(result.draft);
+                        updatePriceParam('min', result.committed);
+                      }}
+                      onBlur={() => {
+                        if (minDraft !== null && minDraft !== '') {
+                          const parsed = Number(minDraft);
+                          if (Number.isFinite(parsed)) {
+                            updatePriceParam(
+                              'min',
+                              clampCatalogPrice(parsed, 0, sliderMaxValue)
+                            );
                           }
                         }
+                        setMinDraft(null);
                       }}
-                      onBlur={() => setMinDraft(null)}
                       className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 font-mono text-xs text-slate-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white tabular-nums"
                     />
                   </div>
@@ -324,32 +475,67 @@ export const MarketplacePage: React.FC = () => {
                       Maximum price
                     </label>
                     <input
+                      ref={maxInputRef}
                       id="price-max-input"
                       type="number"
-                      min={0}
+                      min={sliderMinValue}
+                      max={priceBounds.max}
                       step="1"
                       inputMode="decimal"
                       value={maxDraft !== null ? maxDraft : String(sliderMaxValue)}
-                      {...getHardenedPriceHandlers((cleaned) => {
-                        setMaxDraft(cleaned);
-                        const parsed = Number(cleaned);
-                        if (Number.isFinite(parsed) && parsed >= 0) {
-                          updatePriceParam('max', parsed);
-                        }
-                      })}
+                      {...(() => {
+                        const hardened = getHardenedPriceHandlers(
+                          (cleaned) => {
+                            const parsed = Number(cleaned);
+                            if (Number.isFinite(parsed)) {
+                              const clamped = clampCatalogPrice(
+                                parsed,
+                                sliderMinValue,
+                                priceBounds.max
+                              );
+                              setMaxDraft(String(clamped));
+                              updatePriceParam('max', clamped);
+                            }
+                          },
+                          { allowWheel: true }
+                        );
+                        return {
+                          ...hardened,
+                          onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+                            hardened.onKeyDown(e);
+                            if (e.key === 'Enter') {
+                              e.currentTarget.blur();
+                            }
+                          },
+                        };
+                      })()}
                       onChange={(e) => {
-                        const raw = e.target.value;
-                        setMaxDraft(raw);
-                        if (raw === '') {
-                          updatePriceParam('max', undefined);
-                        } else {
-                          const parsed = Number(raw);
-                          if (Number.isFinite(parsed) && parsed >= 0) {
-                            updatePriceParam('max', parsed);
-                          }
+                        const result = normalizePriceInputChange(
+                          e.target.value,
+                          sliderMinValue,
+                          priceBounds.max,
+                          false
+                        );
+                        if (!result.valid) return;
+                        setMaxDraft(result.draft);
+                        if (result.draft === '' || result.committed !== undefined) {
+                          updatePriceParam('max', result.committed);
                         }
                       }}
-                      onBlur={() => setMaxDraft(null)}
+                      onBlur={() => {
+                        if (maxDraft === '') {
+                          updatePriceParam('max', priceBounds.max);
+                        } else if (maxDraft !== null) {
+                          const parsed = Number(maxDraft);
+                          if (Number.isFinite(parsed)) {
+                            updatePriceParam(
+                              'max',
+                              clampCatalogPrice(parsed, sliderMinValue, priceBounds.max)
+                            );
+                          }
+                        }
+                        setMaxDraft(null);
+                      }}
                       className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 font-mono text-xs text-slate-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white tabular-nums"
                     />
                   </div>

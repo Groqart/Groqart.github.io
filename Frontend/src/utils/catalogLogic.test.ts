@@ -6,6 +6,11 @@ import {
   getPriceBounds,
   resolveTheme,
 } from './catalogLogic';
+import {
+  clampCatalogPrice,
+  normalizePriceInputChange,
+  stepCatalogPriceByWheel,
+} from './priceInput';
 import type { Product } from '../types/marketplace';
 
 const SAMPLE_PRODUCTS: Product[] = [
@@ -142,3 +147,45 @@ test('getCreatorInitials formats single and multi-word names', () => {
   assert.equal(getCreatorInitials('QuantEdge'), 'QU');
   assert.equal(getCreatorInitials(''), 'ZB');
 });
+
+test('catalog price clamping, wheel stepping, and keyboard normalization respect [0..max] and [min..max]', () => {
+  assert.equal(clampCatalogPrice(-25, 0, 299), 0);
+  assert.equal(clampCatalogPrice(999, 0, 299), 299);
+  assert.equal(clampCatalogPrice(20, 50, 299), 50);
+
+  // Wheel up (deltaY < 0) increments, wheel down (deltaY > 0) decrements, clamped to bounds
+  assert.equal(stepCatalogPriceByWheel(0, -100, 0, 0, 299), 1);
+  assert.equal(stepCatalogPriceByWheel(0, 100, 0, 0, 299), 0);
+  assert.equal(stepCatalogPriceByWheel(299, -100, 0, 50, 299), 299);
+  assert.equal(stepCatalogPriceByWheel(50, 100, 0, 50, 299), 50);
+  assert.equal(stepCatalogPriceByWheel(120, 100, 0, 50, 299), 119);
+
+  // Min input clamps immediately above max and normalizes leading zeros
+  assert.deepEqual(normalizePriceInputChange('999', 0, 299, true), {
+    valid: true,
+    draft: '299',
+    committed: 299,
+  });
+  assert.deepEqual(normalizePriceInputChange('05', 0, 299, true), {
+    valid: true,
+    draft: '5',
+    committed: 5,
+  });
+
+  // Max input clamps above product max immediately, but lets user type multi-digit numbers >= min
+  assert.deepEqual(normalizePriceInputChange('500', 50, 299, false), {
+    valid: true,
+    draft: '299',
+    committed: 299,
+  });
+  assert.deepEqual(normalizePriceInputChange('1', 50, 299, false), {
+    valid: true,
+    draft: '1',
+  });
+  assert.deepEqual(normalizePriceInputChange('120', 50, 299, false), {
+    valid: true,
+    draft: '120',
+    committed: 120,
+  });
+});
+

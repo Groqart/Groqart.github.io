@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router';
 import { CheckCircle } from 'lucide-react';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
+import { MobileBottomNav } from './MobileBottomNav';
 import { CartDrawer } from './CartDrawer';
 import { CheckoutModal } from './CheckoutModal';
 import { CreateStoreModal } from './CreateStoreModal';
@@ -81,7 +82,7 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-white px-4 py-3 text-xs font-semibold text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white"
+          className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-50 flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-white px-4 py-3 text-xs font-semibold text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white"
         >
           <CheckCircle className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
           <span>{toastMessage}</span>
@@ -118,7 +119,7 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
           isAdmin={isAdmin}
         />
 
-        <div className="flex flex-1 flex-col min-w-0">
+        <div className="flex flex-1 flex-col min-w-0 pb-16 md:pb-0">
           <main className="flex-1 min-w-0">
             {children || <Outlet />}
           </main>
@@ -136,7 +137,7 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
                 <span>&copy; {new Date().getFullYear()} · Digital Goods &amp; Crypto Checkout</span>
               </div>
 
-              <div className="flex items-center gap-5">
+              <div className="flex flex-wrap items-center justify-center gap-5">
                 <Link to="/" className="hover:text-slate-900 dark:hover:text-white transition">
                   Marketplace
                 </Link>
@@ -146,11 +147,26 @@ export const Layout: React.FC<{ children?: React.ReactNode }> = ({ children }) =
                 <Link to="/purchases" className="hover:text-slate-900 dark:hover:text-white transition">
                   My Library
                 </Link>
+                <Link to="/privacy-policy" className="hover:text-slate-900 dark:hover:text-white transition">
+                  Privacy Policy
+                </Link>
+                <Link to="/terms-of-service" className="hover:text-slate-900 dark:hover:text-white transition">
+                  Terms of Service
+                </Link>
               </div>
             </div>
           </footer>
         </div>
       </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <MobileBottomNav
+        cartCount={cart.length}
+        openCart={() => setIsCartOpen(true)}
+        vendorStoreSlug={vendorStore?.slug || null}
+        setCurrentRole={setCurrentRole}
+        onOpenCreateStore={() => setIsCreateStoreOpen(true)}
+      />
 
       {/* Create Store Wizard */}
       <CreateStoreModal />

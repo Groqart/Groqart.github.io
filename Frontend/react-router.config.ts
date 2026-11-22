@@ -11,6 +11,8 @@ export default {
       "/purchases",
       "/vendor",
       "/auth/verify",
+      "/privacy-policy",
+      "/terms-of-service",
       ...INITIAL_PRODUCTS.map((p) => `/product/${p.id}`),
     ];
   },

@@ -216,7 +216,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </form>
 
-        {/* Right Zone: + Store + Saved / Cart + User Profile Menu */}
+        {/* Right Zone: + Store + Saved / Cart (desktop) + User Profile Menu (top-right on mobile & desktop) */}
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
@@ -229,7 +229,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }
             }}
             aria-label={vendorStoreSlug ? 'Open Storefront Builder' : 'Open Store Setup Wizard'}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-[#0EA5E9] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0284C7] focus-visible:outline-2 focus-visible:outline-cyan-500 transition cursor-pointer whitespace-nowrap"
+            className="hidden md:flex h-9 items-center gap-1.5 rounded-full bg-[#0EA5E9] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0284C7] focus-visible:outline-2 focus-visible:outline-cyan-500 transition cursor-pointer whitespace-nowrap"
           >
             <Plus className="h-3.5 w-3.5 shrink-0" />
             <span>Store</span>
@@ -239,7 +239,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             onClick={openCart}
             aria-label="Saved Items"
-            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-cyan-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white transition cursor-pointer"
+            className="relative hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-cyan-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white transition cursor-pointer"
           >
             <ShoppingBag className="h-4.5 w-4.5" />
             {cartCount > 0 && (

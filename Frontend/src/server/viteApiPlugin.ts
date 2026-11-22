@@ -92,6 +92,8 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         `<url><loc>${origin}/</loc><changefreq>daily</changefreq></url>`,
         `<url><loc>${origin}/purchases</loc><changefreq>daily</changefreq></url>`,
         `<url><loc>${origin}/vendor</loc><changefreq>daily</changefreq></url>`,
+        `<url><loc>${origin}/privacy-policy</loc><changefreq>monthly</changefreq></url>`,
+        `<url><loc>${origin}/terms-of-service</loc><changefreq>monthly</changefreq></url>`,
         ...published.map(
           (p) => `<url><loc>${origin}/product/${encodeURIComponent(p.id)}</loc><changefreq>weekly</changefreq></url>`
         ),

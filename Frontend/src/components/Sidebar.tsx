@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import {
   Home,
   Flame,
@@ -17,6 +17,8 @@ import {
   X,
   Plus,
   ExternalLink,
+  ShieldCheck,
+  FileText,
 } from 'lucide-react';
 import type { ProductCategory } from '../types/marketplace';
 
@@ -122,17 +124,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Desktop Rail / Expanded Sidebar + Mobile Slide-Over Drawer */}
       <aside
         aria-label="Sidebar navigation"
-        className={`fixed inset-y-0 left-0 z-50 h-screen shrink-0 border-r border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0D1320] transition-transform duration-200 ease-out lg:sticky lg:top-16 lg:z-40 lg:h-[calc(100vh-4rem)] lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 h-screen shrink-0 flex flex-col border-r border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0D1320] transition-transform duration-200 ease-out lg:sticky lg:top-16 lg:z-40 lg:h-[calc(100vh-4rem)] lg:translate-x-0 ${
           isOpen
             ? 'translate-x-0 w-60 overflow-y-auto'
             : '-translate-x-full lg:translate-x-0 lg:w-[74px] overflow-y-auto'
         }`}
       >
-        {/* Mobile drawer close header */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 lg:hidden">
-          <span className="font-display text-sm font-bold text-slate-900 dark:text-white">
-            Menu
-          </span>
+        {/* Mobile drawer header with brand logo + site name */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 lg:hidden shrink-0">
+          <Link
+            to="/"
+            onClick={onCloseMobile}
+            aria-label="ZenxusBay Home"
+            className="flex items-center gap-2 whitespace-nowrap shrink-0 rounded-lg py-0.5 focus-visible:outline-2 focus-visible:outline-cyan-500"
+          >
+            <img
+              src="/assets/aistudio/zenxusbay-logo-light_e6cff08a.svg"
+              alt="ZenxusBay"
+              className="h-7 w-7 shrink-0 dark:hidden"
+              referrerPolicy="no-referrer"
+            />
+            <img
+              src="/assets/aistudio/zenxusbay-logo-dark_dc96d39b.svg"
+              alt="ZenxusBay"
+              className="hidden h-7 w-7 shrink-0 dark:block"
+              referrerPolicy="no-referrer"
+            />
+            <span
+              translate="no"
+              className="notranslate font-display text-[17px] tracking-tight leading-none whitespace-nowrap"
+            >
+              <span className="font-extrabold text-[#0B2242] dark:text-white">ZENXUS</span>
+              <span className="font-medium text-[#1A8FD6] dark:text-[#45D4EC]">BAY</span>
+            </span>
+          </Link>
           <button
             type="button"
             onClick={onCloseMobile}
@@ -144,7 +169,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Expanded Sidebar View (shown on mobile when open, and on desktop when isOpen) */}
-        <div className={`p-3 space-y-4 ${isOpen ? 'block' : 'hidden'}`}>
+        <div className={`p-3 flex-1 flex flex-col justify-between gap-4 ${isOpen ? 'flex' : 'hidden'}`}>
+          <div className="space-y-4">
           {/* Primary Discover Section */}
           <div className="space-y-1">
             <button
@@ -273,10 +299,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             ))}
           </div>
+          </div>
+
+          {/* Bottom Legal Links (Expanded Menu - Mobile & Desktop) */}
+          <div className="mt-auto pt-3 border-t border-slate-200 dark:border-slate-800 space-y-1">
+            <Link
+              to="/privacy-policy"
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                  onCloseMobile();
+                }
+              }}
+              className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
+                currentPath === '/privacy-policy'
+                  ? 'bg-cyan-50 text-cyan-800 font-semibold dark:bg-cyan-500/15 dark:text-cyan-300'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+              <span>Privacy Policy</span>
+            </Link>
+            <Link
+              to="/terms-of-service"
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                  onCloseMobile();
+                }
+              }}
+              className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
+                currentPath === '/terms-of-service'
+                  ? 'bg-cyan-50 text-cyan-800 font-semibold dark:bg-cyan-500/15 dark:text-cyan-300'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-white'
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5 shrink-0" />
+              <span>Terms of Service</span>
+            </Link>
+          </div>
         </div>
 
         {/* Desktop Compact Mini-Rail View (when collapsed) */}
-        <div className={`hidden ${!isOpen ? 'lg:flex' : ''} flex-col gap-1.5 p-1.5 pt-3`}>
+        <div className={`hidden ${!isOpen ? 'lg:flex' : ''} flex-1 flex-col justify-between p-1.5 pt-3`}>
+          <div className="flex flex-col gap-1.5">
           <button
             type="button"
             onClick={() => goToCatalog({ category: 'All', sort: 'newest' })}
@@ -340,6 +404,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Plus className="h-4 w-4" />
             <span>+ Store</span>
           </button>
+          </div>
+
+          {/* Bottom Legal Links (Desktop Collapsed Mini-Rail) */}
+          <div className="mt-auto pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-1">
+            <Link
+              to="/privacy-policy"
+              title="Privacy Policy"
+              className={`w-full flex flex-col items-center justify-center rounded-xl px-1 py-1.5 text-[9px] leading-tight text-center font-medium transition-colors ${
+                currentPath === '/privacy-policy'
+                  ? 'bg-cyan-50 text-cyan-800 font-semibold dark:bg-cyan-500/15 dark:text-cyan-300'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-white'
+              }`}
+            >
+              <span>Privacy Policy</span>
+            </Link>
+            <Link
+              to="/terms-of-service"
+              title="Terms of Service"
+              className={`w-full flex flex-col items-center justify-center rounded-xl px-1 py-1.5 text-[9px] leading-tight text-center font-medium transition-colors ${
+                currentPath === '/terms-of-service'
+                  ? 'bg-cyan-50 text-cyan-800 font-semibold dark:bg-cyan-500/15 dark:text-cyan-300'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-white'
+              }`}
+            >
+              <span>Terms of Service</span>
+            </Link>
+          </div>
         </div>
       </aside>
     </>

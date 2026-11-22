@@ -76,4 +76,13 @@ test('price paste sanitization & domain validation harden numeric and host input
   assert.equal(isValidCustomDomain('cybercode.dev'), true);
   assert.equal(isValidCustomDomain('localhost'), false);
   assert.equal(isValidCustomDomain('cybercode.nexusbyte.de5.net'), false);
+
+  assert.equal(isValidStoreSlug('privacy-policy'), false);
+  assert.equal(isValidStoreSlug('terms-of-service'), false);
+  assert.deepEqual(detectStorefrontContext('nexusbyte.de5.net', '/privacy-policy'), {
+    mode: 'marketplace',
+  });
+  assert.deepEqual(detectStorefrontContext('nexusbyte.de5.net', '/terms-of-service'), {
+    mode: 'marketplace',
+  });
 });
